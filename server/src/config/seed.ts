@@ -20,7 +20,7 @@ export async function seedDatabase(): Promise<void> {
   // 1. Ensure Master Admin Account Exists
   const adminUser = await User.findOne({ role: 'MASTER_ADMIN' });
   if (!adminUser) {
-    const adminPassword = process.env.INITIAL_ADMIN_PASSWORD || 'Admin@12345';
+    const adminPassword = process.env.INITIAL_ADMIN_PASSWORD || 'UpVolt#Master_2026!';
     const adminHash = await bcrypt.hash(adminPassword, 10);
     await new User({
       userId: 'admin',
