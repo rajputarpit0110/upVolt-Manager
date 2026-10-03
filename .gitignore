@@ -37,3 +37,6 @@ Thumbs.db
 # Uploads / Runtime data
 server/uploads/
 server/data/
+
+# Architecture & Internal Documentation
+ARCHITECTURE_AND_ROLES.txt
