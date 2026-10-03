@@ -16,6 +16,10 @@ import { AuditLog } from '../models/AuditLog';
 import { Notification } from '../models/Notification';
 import { SystemSetting } from '../models/SystemSetting';
 
+import { CollegeDispatch } from '../models/CollegeDispatch';
+import { CollegeInventory } from '../models/CollegeInventory';
+import { ensureDefaultCategories } from '../controllers/categoryController';
+
 dotenv.config();
 
 export async function cleanDatabase(): Promise<void> {
@@ -25,7 +29,7 @@ export async function cleanDatabase(): Promise<void> {
   if (mongoose.connection.readyState === 0) {
     try {
       console.log(`[CleanDB] Connecting to: ${primaryUri.replace(/:([^:@]+)@/, ':****@')}`);
-      await mongoose.connect(primaryUri, { serverSelectionTimeoutMS: 4000 });
+      await mongoose.connect(primaryUri, { serverSelectionTimeoutMS: 5000 });
     } catch (err) {
       console.warn('[CleanDB] Primary cloud connection failed. Falling back to local MongoDB...');
       await mongoose.connect(localFallbackUri, { serverSelectionTimeoutMS: 3000 });
@@ -47,6 +51,8 @@ export async function cleanDatabase(): Promise<void> {
     Supplier.deleteMany({}),
     Notification.deleteMany({}),
     AuditLog.deleteMany({}),
+    CollegeDispatch.deleteMany({}),
+    CollegeInventory.deleteMany({}),
     User.deleteMany({ role: { $ne: 'MASTER_ADMIN' } }),
   ]);
 
@@ -63,13 +69,15 @@ export async function cleanDatabase(): Promise<void> {
   console.log(`  - Suppliers: ${results[9].deletedCount}`);
   console.log(`  - Notifications: ${results[10].deletedCount}`);
   console.log(`  - Audit Logs: ${results[11].deletedCount}`);
-  console.log(`  - Non-admin Users: ${results[12].deletedCount}`);
+  console.log(`  - College Dispatches: ${results[12].deletedCount}`);
+  console.log(`  - College Inventories: ${results[13].deletedCount}`);
+  console.log(`  - Non-admin Users: ${results[14].deletedCount}`);
 
-  // Ensure Master Admin account exists
+  // Ensure Master Admin account exists with known password
+  const adminPassword = process.env.INITIAL_ADMIN_PASSWORD || 'Admin@12345';
+  const adminHash = await bcrypt.hash(adminPassword, 10);
   const adminUser = await User.findOne({ role: 'MASTER_ADMIN' });
   if (!adminUser) {
-    const adminPassword = process.env.INITIAL_ADMIN_PASSWORD || 'Admin@12345';
-    const adminHash = await bcrypt.hash(adminPassword, 10);
     await new User({
       userId: 'admin',
       name: 'Master Admin',
@@ -80,9 +88,13 @@ export async function cleanDatabase(): Promise<void> {
       isActive: true,
       forcePasswordChange: false,
     }).save();
-    console.log(`[CleanDB] Re-initialized Master Admin: admin / ${adminPassword}`);
+    console.log(`[CleanDB] Initialized Master Admin: admin / ${adminPassword}`);
   } else {
-    console.log(`[CleanDB] Preserved Master Admin: ${adminUser.userId} (${adminUser.name})`);
+    adminUser.passwordHash = adminHash;
+    adminUser.isActive = true;
+    adminUser.forcePasswordChange = false;
+    await adminUser.save();
+    console.log(`[CleanDB] Preserved Master Admin: ${adminUser.userId} (Password set to ${adminPassword})`);
   }
 
   // Ensure default SystemSetting exists
@@ -101,6 +113,9 @@ export async function cleanDatabase(): Promise<void> {
     await setting.save();
     console.log('[CleanDB] Re-initialized default SystemSettings.');
   }
+
+  // Ensure default official categories exist for product categorization
+  await ensureDefaultCategories();
 
   console.log('[CleanDB] Database has been completely cleaned of dummy data!');
 }
