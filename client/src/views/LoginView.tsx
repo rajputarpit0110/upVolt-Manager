@@ -20,7 +20,10 @@ export const LoginView: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const res = await authApi.login({ username, password });
+      const res = await authApi.login({
+        username: username.trim(),
+        password: password.trim(),
+      });
       if (res && res.success && res.token && res.user) {
         login(res.token, res.user);
         success(`Welcome back, ${res.user.name}!`, 'Signed In');
