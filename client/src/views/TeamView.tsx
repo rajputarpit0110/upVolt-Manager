@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserCheck, Plus, KeyRound, ShieldCheck, UserX, Check, Lock } from 'lucide-react';
-import { User } from '../types';
+import { User, Role } from '../types';
 import { userApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Common/Toast';
@@ -18,7 +18,7 @@ export const TeamView: React.FC = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'MASTER_ADMIN' | 'STAFF' | 'COLLEGE_MEMBER' | 'CAMPUS_EXECUTIVE'>('STAFF');
+  const [role, setRole] = useState<Role>('MEMBER');
   const [college, setCollege] = useState('KIET Group of Institutions');
   const [customCollege, setCustomCollege] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -218,7 +218,7 @@ export const TeamView: React.FC = () => {
                           ? `Campus Executive${u.college ? ` (${u.college})` : ''}`
                           : u.role === 'COLLEGE_MEMBER'
                           ? `College Member (${u.college})`
-                          : 'Staff Member'}
+                          : 'Member'}
                       </span>
                     </td>
 
@@ -346,7 +346,7 @@ export const TeamView: React.FC = () => {
               onChange={(e: any) => setRole(e.target.value)}
               className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800"
             >
-              <option value="STAFF">Staff Member (Operational access; no delete access)</option>
+              <option value="MEMBER">Member (Operational access; inventory & orders)</option>
               <option value="CAMPUS_EXECUTIVE">Campus Executive (Direct student handovers & personal deliveries only)</option>
               <option value="COLLEGE_MEMBER">College Member (Strictly scoped to their college inventory)</option>
               <option value="MASTER_ADMIN">Master Admin (Complete permissions & soft-delete)</option>

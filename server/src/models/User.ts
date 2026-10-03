@@ -1,6 +1,6 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
-export type UserRole = 'MASTER_ADMIN' | 'STAFF' | 'COLLEGE_MEMBER' | 'CAMPUS_EXECUTIVE';
+export type UserRole = 'MASTER_ADMIN' | 'MEMBER' | 'STAFF' | 'COLLEGE_MEMBER' | 'CAMPUS_EXECUTIVE';
 
 export interface IUser extends Document {
   userId: string; // Permanent username e.g. 'admin', 'rahul'
@@ -40,8 +40,8 @@ const UserSchema: Schema = new Schema(
     },
     role: {
       type: String,
-      enum: ['MASTER_ADMIN', 'STAFF', 'COLLEGE_MEMBER', 'CAMPUS_EXECUTIVE'],
-      default: 'STAFF',
+      enum: ['MASTER_ADMIN', 'MEMBER', 'STAFF', 'COLLEGE_MEMBER', 'CAMPUS_EXECUTIVE'],
+      default: 'MEMBER',
       required: true,
     },
     college: {

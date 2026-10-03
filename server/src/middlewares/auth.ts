@@ -5,7 +5,7 @@ import { User, IUser } from '../models/User';
 export interface AuthUserPayload {
   userId: string;
   name: string;
-  role: 'MASTER_ADMIN' | 'STAFF' | 'COLLEGE_MEMBER' | 'CAMPUS_EXECUTIVE';
+  role: 'MASTER_ADMIN' | 'MEMBER' | 'STAFF' | 'COLLEGE_MEMBER' | 'CAMPUS_EXECUTIVE';
   college?: string;
   email?: string;
 }
@@ -83,10 +83,13 @@ export const requireStaffOrAdmin = (
   res: Response,
   next: NextFunction
 ): void => {
-  if (!req.user || (req.user.role !== 'MASTER_ADMIN' && req.user.role !== 'STAFF')) {
+  if (
+    !req.user ||
+    (req.user.role !== 'MASTER_ADMIN' && req.user.role !== 'STAFF' && req.user.role !== 'MEMBER')
+  ) {
     res.status(403).json({
       success: false,
-      message: 'Access Denied: UpVolt Staff or Master Admin privileges required.',
+      message: 'Access Denied: UpVolt Member or Master Admin privileges required.',
     });
     return;
   }

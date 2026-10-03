@@ -57,7 +57,7 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
         ? 'COLLEGE_MEMBER'
         : role === 'CAMPUS_EXECUTIVE'
         ? 'CAMPUS_EXECUTIVE'
-        : 'STAFF';
+        : 'MEMBER';
 
     const user = new User({
       userId: cleanUserId,
