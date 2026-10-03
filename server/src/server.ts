@@ -31,11 +31,20 @@ app.use(helmet());
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
-        callback(null, true);
-      } else {
-        callback(null, false);
+      // Allow requests with no origin (like mobile apps, curl, or server-to-server)
+      if (!origin) return callback(null, true);
+
+      // In production and dev, allow localhost, render.com, vercel, or custom frontend URL
+      if (
+        origin.startsWith('http://localhost:') ||
+        origin.startsWith('http://127.0.0.1:') ||
+        origin.endsWith('.onrender.com') ||
+        origin.endsWith('.vercel.app') ||
+        (process.env.CLIENT_URL && origin.includes(process.env.CLIENT_URL))
+      ) {
+        return callback(null, true);
       }
+      return callback(null, true); // Allow all web origins for SaaS API access
     },
     credentials: true,
   })

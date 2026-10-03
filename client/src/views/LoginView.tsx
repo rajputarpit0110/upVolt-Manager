@@ -21,12 +21,18 @@ export const LoginView: React.FC = () => {
     setIsSubmitting(true);
     try {
       const res = await authApi.login({ username, password });
-      if (res.success && res.token && res.user) {
+      if (res && res.success && res.token && res.user) {
         login(res.token, res.user);
         success(`Welcome back, ${res.user.name}!`, 'Signed In');
+      } else {
+        error((res as any)?.message || 'Invalid username or password', 'Authentication Failed');
       }
     } catch (err: any) {
-      error(err.message || 'Invalid username or password', 'Authentication Failed');
+      const errorMsg =
+        err.response?.data?.message ||
+        err.message ||
+        'Server not responding. Please check backend status or network connection.';
+      error(errorMsg, 'Authentication Failed');
     } finally {
       setIsSubmitting(false);
     }
