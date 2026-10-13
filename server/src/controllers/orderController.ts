@@ -11,6 +11,7 @@ import {
   softDeleteOrder,
   restoreDeletedOrder,
   permanentlyDeleteOrder,
+  assignOrderAgent,
 } from '../services/orderService';
 
 export const getOrders = async (req: Request, res: Response): Promise<void> => {
@@ -28,12 +29,31 @@ export const getOrders = async (req: Request, res: Response): Promise<void> => {
 
     const conditions: any[] = [{ isDeleted: isDeleted === 'true' }];
 
-    // If CAMPUS_EXECUTIVE, strictly restrict to orders they personally delivered or created
+    // If COLLEGE_MEMBER, strictly restrict to orders belonging to their college
+    if (req.user?.role === 'COLLEGE_MEMBER') {
+      const college = req.user.college;
+      if (!college) {
+        res.status(403).json({ success: false, message: 'No college mapped to your account.' });
+        return;
+      }
+      conditions.push({
+        $or: [
+          { college: college },
+          { 'customer.college': college },
+          { 'deliveryInfo.college': college },
+          { createdBy: req.user.userId },
+        ],
+      });
+    }
+
+    // If CAMPUS_EXECUTIVE, strictly restrict to orders assigned to them or delivered/created by them
     if (req.user?.role === 'CAMPUS_EXECUTIVE') {
       conditions.push({
         $or: [
           { 'deliveryInfo.deliveredBy': req.user.name },
           { 'deliveryInfo.deliveredBy': req.user.userId },
+          { 'assignedAgent.userId': req.user.userId },
+          { 'assignedAgent.name': req.user.name },
           { createdBy: req.user.userId },
           { createdBy: req.user.name },
         ],
@@ -48,12 +68,14 @@ export const getOrders = async (req: Request, res: Response): Promise<void> => {
       conditions.push({
         $or: [
           { orderNumber: regex },
+          { webOrderNumber: regex },
           { 'customer.name': regex },
           { 'customer.phone': regex },
           { 'customer.college': regex },
           { 'deliveryInfo.customerName': regex },
           { 'deliveryInfo.phone': regex },
           { 'deliveryInfo.college': regex },
+          { 'assignedAgent.name': regex },
           { 'items.productName': regex },
           { 'items.sku': regex },
         ],
@@ -80,8 +102,9 @@ export const getOrders = async (req: Request, res: Response): Promise<void> => {
       .skip(skip)
       .limit(parseInt(String(limit)));
 
-    // Strip business profit & COGS metrics for CAMPUS_EXECUTIVE
-    const orders = req.user?.role === 'CAMPUS_EXECUTIVE'
+    // Strip business profit & COGS metrics for CAMPUS_EXECUTIVE & COLLEGE_MEMBER
+    const isLimitedRole = req.user?.role === 'CAMPUS_EXECUTIVE' || req.user?.role === 'COLLEGE_MEMBER';
+    const orders = isLimitedRole
       ? rawOrders.map((ord: any) => {
           const o = ord.toObject ? ord.toObject() : { ...ord };
           delete o.totalCost;
@@ -124,11 +147,26 @@ export const getOrderById = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    // CAMPUS_EXECUTIVE can only view their own delivered order
+    // COLLEGE_MEMBER can only view orders for their college
+    if (req.user?.role === 'COLLEGE_MEMBER') {
+      const isCollegeMatch =
+        order.college === req.user.college ||
+        order.customer?.college === req.user.college ||
+        order.deliveryInfo?.college === req.user.college ||
+        order.createdBy === req.user.userId;
+      if (!isCollegeMatch) {
+        res.status(403).json({ success: false, message: 'Access Denied: You can only view orders for your college.' });
+        return;
+      }
+    }
+
+    // CAMPUS_EXECUTIVE can only view orders assigned to or delivered by them
     if (req.user?.role === 'CAMPUS_EXECUTIVE') {
       const isOwner =
         order.deliveryInfo?.deliveredBy === req.user.name ||
         order.deliveryInfo?.deliveredBy === req.user.userId ||
+        order.assignedAgent?.userId === req.user.userId ||
+        order.assignedAgent?.name === req.user.name ||
         order.createdBy === req.user.userId ||
         order.createdBy === req.user.name;
       if (!isOwner) {
@@ -151,6 +189,20 @@ export const handleCreateOrder = async (req: Request, res: Response): Promise<vo
     const user = req.user!;
     const body = { ...req.body };
 
+    // When College Member records an order, bind college and website source
+    if (user.role === 'COLLEGE_MEMBER') {
+      body.college = user.college;
+      body.source = body.source || 'Website';
+      body.customer = {
+        ...(body.customer || {}),
+        college: user.college,
+      };
+      body.deliveryInfo = {
+        ...(body.deliveryInfo || {}),
+        college: user.college,
+      };
+    }
+
     // When Campus Executive records a delivery, auto-mark as Delivered and tag them
     if (user.role === 'CAMPUS_EXECUTIVE') {
       body.status = 'Delivered';
@@ -166,6 +218,24 @@ export const handleCreateOrder = async (req: Request, res: Response): Promise<vo
 
     const order = await createOrder(body, user, req.ip);
     res.status(201).json({ success: true, order });
+  } catch (error: any) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+export const handleAssignAgent = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { agentUserId } = req.body;
+    const user = req.user!;
+    const order = await assignOrderAgent(id, agentUserId, user, req.ip);
+    res.json({
+      success: true,
+      message: agentUserId
+        ? 'Distributive agent successfully assigned to order.'
+        : 'Distributive agent unassigned from order.',
+      order,
+    });
   } catch (error: any) {
     res.status(400).json({ success: false, message: error.message });
   }

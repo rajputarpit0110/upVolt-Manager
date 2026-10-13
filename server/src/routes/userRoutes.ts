@@ -1,12 +1,20 @@
 import { Router } from 'express';
-import { getUsers, createUser, toggleUserStatus } from '../controllers/userController';
-import { authenticateToken, requireMasterAdmin } from '../middlewares/auth';
+import {
+  getUsers,
+  createUser,
+  toggleUserStatus,
+  updateUser,
+  resetPassword,
+} from '../controllers/userController';
+import { authenticateToken, requireStaffOrAdmin } from '../middlewares/auth';
 
 const router = Router();
 
 router.use(authenticateToken);
-router.get('/', requireMasterAdmin, getUsers);
-router.post('/', requireMasterAdmin, createUser);
-router.patch('/:id/toggle-status', requireMasterAdmin, toggleUserStatus);
+router.get('/', requireStaffOrAdmin, getUsers);
+router.post('/', requireStaffOrAdmin, createUser);
+router.patch('/:id/toggle-status', requireStaffOrAdmin, toggleUserStatus);
+router.put('/:id', requireStaffOrAdmin, updateUser);
+router.post('/:id/reset-password', requireStaffOrAdmin, resetPassword);
 
 export default router;

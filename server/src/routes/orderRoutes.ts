@@ -12,6 +12,7 @@ import {
   handleRestoreOrder,
   handlePermanentDeleteOrder,
   getOrderVersions,
+  handleAssignAgent,
 } from '../controllers/orderController';
 import { authenticateToken, requireMasterAdmin } from '../middlewares/auth';
 
@@ -31,6 +32,8 @@ router.get('/:id/versions', getOrderVersions);
 router.post('/', handleCreateOrder);
 router.put('/:id', handleUpdateOrder);
 router.patch('/:id/status', handleUpdateStatus);
+router.patch('/:id/assign', handleAssignAgent);
+router.post('/:id/assign', handleAssignAgent);
 router.post('/:id/cancel', handleCancelOrder);
 router.post('/:id/return', handleReturnOrder);
 

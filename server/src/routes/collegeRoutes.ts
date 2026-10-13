@@ -4,6 +4,7 @@ import {
   getDispatches,
   getInventoryByCollege,
   getColleges,
+  getCollegeTeamHandler,
 } from '../controllers/collegeDispatchController';
 import { authenticateToken, requireStaffOrAdmin } from '../middlewares/auth';
 
@@ -17,5 +18,6 @@ router.get('/dispatches', getDispatches);
 router.get('/inventory', getInventoryByCollege);
 router.get('/inventory/:college', getInventoryByCollege);
 router.get('/list', getColleges);
+router.get('/team', getCollegeTeamHandler);
 
 export default router;

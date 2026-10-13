@@ -12,6 +12,8 @@ export interface ICollegeDispatchItem {
 export interface ICollegeDispatch extends Document {
   dispatchNumber: string; // e.g. DISP-202609-0001
   college: string;
+  collegeExecutive?: string; // College Ambassador / Executive name or userId
+  deliveryAgent?: string; // Assigned Campus Delivery Agent name or userId
   dispatchDate: Date;
   items: ICollegeDispatchItem[];
   totalUnits: number;
@@ -49,6 +51,14 @@ const CollegeDispatchSchema: Schema = new Schema(
       required: true,
       trim: true,
       index: true,
+    },
+    collegeExecutive: {
+      type: String,
+      trim: true,
+    },
+    deliveryAgent: {
+      type: String,
+      trim: true,
     },
     dispatchDate: {
       type: Date,

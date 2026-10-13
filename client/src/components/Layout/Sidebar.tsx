@@ -25,6 +25,7 @@ export type NavTab =
   | 'products'
   | 'team'
   | 'reports'
+  | 'college_orders'
   | 'college_inventory'
   | 'college_dispatches'
   | 'campus_deliveries'
@@ -74,7 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'college_dispatch', label: 'College Dispatch', icon: Truck, section: 'Stock & Distribution' },
     { id: 'orders', label: 'Delivered Orders', icon: ShoppingCart, section: 'Sales' },
     { id: 'products', label: 'Products', icon: Boxes, section: 'Catalog' },
-    { id: 'team', label: 'Team / Users', icon: UserCheck, adminOnly: true, section: 'Administration' },
+    { id: 'team', label: 'Team / Users', icon: UserCheck, section: 'Administration' },
     { id: 'reports', label: 'Reports', icon: BarChart3, section: 'Analytics' },
   ];
 
@@ -85,6 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     icon: any;
     section?: string;
   }[] = [
+    { id: 'college_orders', label: 'Campus Orders & Assign', icon: ShoppingCart, section: 'Orders' },
     { id: 'college_inventory', label: 'My College Inventory', icon: Cpu, section: 'Campus Scope' },
     { id: 'college_dispatches', label: 'Received Stock', icon: Truck, section: 'Campus Scope' },
   ];
@@ -124,7 +126,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {isCollegeMember
                 ? `${user?.college || 'COLLEGE'} PORTAL`
                 : isCampusExecutive
-                ? 'CAMPUS FULFILLMENT'
+                ? 'CAMPUS DISTRIBUTIONS'
                 : 'HARDWARE SAAS'}
             </p>
           </div>
@@ -199,7 +201,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 ) : isCampusExecutive ? (
                   <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-700 font-semibold truncate">
                     <UserCheck className="w-3 h-3 text-emerald-600 shrink-0" />
-                    <span className="truncate">Campus Executive</span>
+                    <span className="truncate">Campus Distributive Agent</span>
                   </span>
                 ) : (
                   <span className="text-[10px] text-slate-500 font-medium">Staff Member</span>

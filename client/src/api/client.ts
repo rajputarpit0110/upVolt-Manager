@@ -169,14 +169,28 @@ export const orderApi = {
   create: async (data: {
     customer?: any;
     items: { productId: string; quantity: number; sellingPrice: number; discount?: number }[];
-    status?: 'Draft' | 'Confirmed';
+    status?: 'Draft' | 'Confirmed' | 'Delivered' | 'Processing';
     paymentStatus?: string;
     paymentMethod?: string;
     amountPaid?: number;
+    deliveryCharge?: number;
     notes?: string;
     idempotencyKey?: string;
+    deliveryInfo?: any;
+    college?: string;
+    source?: 'Website' | 'Direct' | 'Manual';
+    webOrderNumber?: string;
+    assignedAgentUserId?: string;
+    orderDate?: string | Date;
   }) => {
     const res = await api.post<{ success: boolean; order: Order }>('/orders', data);
+    return res.data;
+  },
+  assignAgent: async (orderId: string, agentUserId: string | null) => {
+    const res = await api.patch<{ success: boolean; message: string; order: Order }>(
+      `/orders/${orderId}/assign`,
+      { agentUserId }
+    );
     return res.data;
   },
   update: async (
@@ -389,6 +403,8 @@ export const userApi = {
 export const collegeApi = {
   createDispatch: async (data: {
     college: string;
+    collegeExecutive?: string;
+    deliveryAgent?: string;
     dispatchDate?: string;
     items: { productId: string; quantity: number }[];
     notes?: string;
@@ -418,6 +434,15 @@ export const collegeApi = {
   },
   getColleges: async () => {
     const res = await api.get<{ success: boolean; colleges: string[] }>('/colleges/list');
+    return res.data;
+  },
+  getTeam: async (college?: string) => {
+    const res = await api.get<{
+      success: boolean;
+      executives: User[];
+      deliveryAgents: User[];
+      all: User[];
+    }>('/colleges/team', { params: { college } });
     return res.data;
   },
 };

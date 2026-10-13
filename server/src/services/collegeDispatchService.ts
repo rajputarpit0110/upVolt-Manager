@@ -4,9 +4,12 @@ import { CollegeDispatch, ICollegeDispatchItem } from '../models/CollegeDispatch
 import { CollegeInventory } from '../models/CollegeInventory';
 import { StockMovement } from '../models/StockMovement';
 import { AuditLog } from '../models/AuditLog';
+import { User } from '../models/User';
 
 export interface ICreateDispatchInput {
   college: string;
+  collegeExecutive?: string;
+  deliveryAgent?: string;
   dispatchDate?: string | Date;
   items: {
     productId: string;
@@ -17,7 +20,15 @@ export interface ICreateDispatchInput {
 }
 
 export async function createCollegeDispatch(input: ICreateDispatchInput) {
-  const { college, dispatchDate = new Date(), items, dispatchedBy, notes } = input;
+  const {
+    college,
+    collegeExecutive,
+    deliveryAgent,
+    dispatchDate = new Date(),
+    items,
+    dispatchedBy,
+    notes,
+  } = input;
 
   if (!college || !college.trim()) {
     throw new Error('College name is required.');
@@ -126,6 +137,8 @@ export async function createCollegeDispatch(input: ICreateDispatchInput) {
   const dispatch = await CollegeDispatch.create({
     dispatchNumber,
     college: college.trim(),
+    collegeExecutive: collegeExecutive?.trim() || undefined,
+    deliveryAgent: deliveryAgent?.trim() || undefined,
     dispatchDate: new Date(dispatchDate),
     items: dispatchItems,
     totalUnits,
@@ -146,6 +159,8 @@ export async function createCollegeDispatch(input: ICreateDispatchInput) {
     newState: {
       dispatchNumber,
       college: college.trim(),
+      collegeExecutive: collegeExecutive?.trim(),
+      deliveryAgent: deliveryAgent?.trim(),
       totalUnits,
       totalCost,
       itemsSummary: dispatchItems.map((i) => `${i.quantity}x ${i.productName}`).join(', '),
@@ -153,6 +168,20 @@ export async function createCollegeDispatch(input: ICreateDispatchInput) {
   });
 
   return dispatch;
+}
+
+export async function getCollegeTeam(college?: string) {
+  const query: any = {
+    role: { $in: ['COLLEGE_MEMBER', 'CAMPUS_EXECUTIVE'] },
+    isActive: true,
+  };
+  if (college && college.trim()) {
+    query.college = { $regex: new RegExp(`^${college.trim()}$`, 'i') };
+  }
+  const users = await User.find(query, 'userId name role college phone email department').sort({ name: 1 });
+  const executives = users.filter((u) => u.role === 'COLLEGE_MEMBER');
+  const deliveryAgents = users.filter((u) => u.role === 'CAMPUS_EXECUTIVE');
+  return { executives, deliveryAgents, all: users };
 }
 
 export async function getCollegeDispatches(filters: {

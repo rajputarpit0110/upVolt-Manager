@@ -4,6 +4,7 @@ import {
   getCollegeDispatches,
   getCollegeInventory,
   getAllCollegesList,
+  getCollegeTeam,
 } from '../services/collegeDispatchService';
 
 export const createDispatch = async (req: Request, res: Response): Promise<void> => {
@@ -16,10 +17,12 @@ export const createDispatch = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const { college, dispatchDate, items, notes } = req.body;
+    const { college, collegeExecutive, deliveryAgent, dispatchDate, items, notes } = req.body;
 
     const dispatch = await createCollegeDispatch({
       college,
+      collegeExecutive,
+      deliveryAgent,
       dispatchDate,
       items,
       dispatchedBy: req.user.userId,
@@ -33,6 +36,16 @@ export const createDispatch = async (req: Request, res: Response): Promise<void>
     });
   } catch (error: any) {
     res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+export const getCollegeTeamHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const targetCollege = req.query.college as string | undefined;
+    const team = await getCollegeTeam(targetCollege);
+    res.json({ success: true, ...team });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 

@@ -13,8 +13,10 @@ import {
   Layers,
   ArrowRight,
   Eye,
+  UserCheck,
+  User as UserIcon,
 } from 'lucide-react';
-import { Product, CollegeDispatch } from '../types';
+import { Product, CollegeDispatch, User } from '../types';
 import { productApi, collegeApi } from '../api/client';
 import { Modal } from '../components/Common/Modal';
 import { useToast } from '../components/Common/Toast';
@@ -22,7 +24,7 @@ import { useAuth } from '../context/AuthContext';
 
 interface DispatchRow {
   productId: string;
-  quantity: number;
+  quantity: number | '';
 }
 
 export const CollegeDispatchView: React.FC = () => {
@@ -35,12 +37,19 @@ export const CollegeDispatchView: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form State
-  const [collegeName, setCollegeName] = useState('KIET Group of Institutions');
+  // Form State - start unselected / empty by default
+  const [collegeName, setCollegeName] = useState('');
   const [customCollege, setCustomCollege] = useState('');
+
+  // College Recipient Personnel State (Campus Ambassador receiving shipment)
+  const [collegeExecutive, setCollegeExecutive] = useState('');
+  const [customExecutive, setCustomExecutive] = useState('');
+  const [executives, setExecutives] = useState<User[]>([]);
+  const [isLoadingTeam, setIsLoadingTeam] = useState(false);
+
   const [dispatchDate, setDispatchDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
-  const [items, setItems] = useState<DispatchRow[]>([{ productId: '', quantity: 1 }]);
+  const [items, setItems] = useState<DispatchRow[]>([{ productId: '', quantity: '' }]);
 
   // Confirmation Modal State
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -67,9 +76,6 @@ export const CollegeDispatchView: React.FC = () => {
 
       if (prodRes.success) {
         setProducts(prodRes.products);
-        if (prodRes.products.length > 0 && !items[0]?.productId) {
-          setItems([{ productId: prodRes.products[0]._id, quantity: 1 }]);
-        }
       }
       if (dispRes.success) {
         setDispatches(dispRes.dispatches);
@@ -86,8 +92,7 @@ export const CollegeDispatchView: React.FC = () => {
 
   // Row Manipulation
   const addItemRow = () => {
-    if (products.length === 0) return;
-    setItems((prev) => [...prev, { productId: products[0]._id, quantity: 1 }]);
+    setItems((prev) => [...prev, { productId: '', quantity: '' }]);
   };
 
   const removeItemRow = (index: number) => {
@@ -108,6 +113,39 @@ export const CollegeDispatchView: React.FC = () => {
     return collegeName === '__CUSTOM__' ? customCollege.trim() : collegeName.trim();
   };
 
+  const getSelectedExecutive = () => {
+    if (collegeExecutive === '__CUSTOM__') return customExecutive.trim();
+    return collegeExecutive.trim();
+  };
+
+  // Dynamically fetch and filter personnel for selected college
+  useEffect(() => {
+    const finalCollege = getSelectedCollege();
+    if (finalCollege) {
+      loadCollegeTeam(finalCollege);
+    } else {
+      setExecutives([]);
+      setCollegeExecutive('');
+      setCustomExecutive('');
+    }
+  }, [collegeName, customCollege]);
+
+  const loadCollegeTeam = async (targetCol: string) => {
+    setIsLoadingTeam(true);
+    try {
+      const res = await collegeApi.getTeam(targetCol);
+      if (res.success) {
+        setExecutives(res.executives || []);
+        setCollegeExecutive('');
+        setCustomExecutive('');
+      }
+    } catch (err: any) {
+      console.error('Failed to load college team personnel', err);
+    } finally {
+      setIsLoadingTeam(false);
+    }
+  };
+
   const totalUnits = items.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
 
   const totalCost = items.reduce((sum, r) => {
@@ -116,37 +154,53 @@ export const CollegeDispatchView: React.FC = () => {
     return sum + (Number(r.quantity) || 0) * cp;
   }, 0);
 
-  // Check if any row exceeds available stock
+  // Check if any selected row exceeds available stock
   const hasInsufficientStock = items.some((row) => {
+    if (!row.productId) return false;
     const prod = products.find((p) => p._id === row.productId);
-    if (!prod) return true;
+    if (!prod) return false;
     return (Number(row.quantity) || 0) > prod.currentStock;
   });
+
+  const hasValidItems = items.some((r) => r.productId && Number(r.quantity) > 0);
+  const isCollegeSelected = Boolean(collegeName && (collegeName !== '__CUSTOM__' || customCollege.trim()));
+  const isExecutiveSelected = Boolean(getSelectedExecutive());
 
   const handleOpenConfirm = (e: React.FormEvent) => {
     e.preventDefault();
     const finalCollege = getSelectedCollege();
     if (!finalCollege) {
-      error('Please select or enter a valid college name.');
+      error('Please select or enter a valid destination college.');
       return;
     }
 
-    if (items.length === 0) {
-      error('At least one product must be added to the dispatch.');
+    const finalExec = getSelectedExecutive();
+    if (!finalExec) {
+      error('Please select or specify the College Executive / Campus Ambassador receiving this delivery.');
+      return;
+    }
+
+    const validItems = items.filter((r) => r.productId);
+    if (validItems.length === 0) {
+      error('Please select at least one component to dispatch.');
       return;
     }
 
     for (const row of items) {
+      if (!row.productId) {
+        error('Please select a component for each row.');
+        return;
+      }
       const prod = products.find((p) => p._id === row.productId);
       if (!prod) {
         error('Please select a valid product for all rows.');
         return;
       }
-      if (!row.quantity || row.quantity <= 0) {
+      if (!row.quantity || Number(row.quantity) <= 0) {
         error(`Quantity must be greater than 0 for ${prod.name}.`);
         return;
       }
-      if (row.quantity > prod.currentStock) {
+      if (Number(row.quantity) > prod.currentStock) {
         error(
           `Insufficient stock for ${prod.name}. Available: ${prod.currentStock}, Requested: ${row.quantity}`
         );
@@ -160,10 +214,12 @@ export const CollegeDispatchView: React.FC = () => {
   const handleExecuteDispatch = async () => {
     setIsSubmitting(true);
     const finalCollege = getSelectedCollege();
+    const finalExec = getSelectedExecutive();
 
     try {
       const res = await collegeApi.createDispatch({
         college: finalCollege,
+        collegeExecutive: finalExec,
         dispatchDate,
         items: items.map((i) => ({
           productId: i.productId,
@@ -174,14 +230,16 @@ export const CollegeDispatchView: React.FC = () => {
 
       if (res.success) {
         success(
-          `Successfully dispatched ${res.dispatch.totalUnits} units to ${finalCollege}. Central stock decreased and college stock updated!`,
+          `Successfully dispatched ${res.dispatch.totalUnits} units to ${finalCollege} (Recipient: ${finalExec}). Central stock decreased!`,
           'Dispatch Confirmed'
         );
         setIsConfirmModalOpen(false);
+        setCollegeName('');
+        setCustomCollege('');
+        setCollegeExecutive('');
+        setCustomExecutive('');
         setNotes('');
-        if (products.length > 0) {
-          setItems([{ productId: products[0]._id, quantity: 1 }]);
-        }
+        setItems([{ productId: '', quantity: '' }]);
         loadData();
       }
     } catch (err: any) {
@@ -226,77 +284,143 @@ export const CollegeDispatchView: React.FC = () => {
         onSubmit={handleOpenConfirm}
         className="bg-white border border-slate-200 rounded-xl shadow-subtle p-5 space-y-6"
       >
-        {/* Destination & Date Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-4 border-b border-slate-100">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Destination College / Institution <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={collegeName}
-              onChange={(e) => setCollegeName(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-            >
-              <option value="KIET Group of Institutions">KIET Group of Institutions</option>
-              <option value="ABES Engineering College">ABES Engineering College</option>
-              <option value="AKGEC Ghaziabad">AKGEC Ghaziabad</option>
-              <option value="Galgotias University">Galgotias University</option>
-              <option value="GL Bajaj Institute">GL Bajaj Institute</option>
-              {collegesList
-                .filter(
-                  (c) =>
-                    ![
-                      'KIET Group of Institutions',
-                      'ABES Engineering College',
-                      'AKGEC Ghaziabad',
-                      'Galgotias University',
-                      'GL Bajaj Institute',
-                    ].includes(c)
-                )
-                .map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              <option value="__CUSTOM__">+ Other / Enter Custom College...</option>
-            </select>
+        {/* Destination & College Personnel Row */}
+        <div className="space-y-4 pb-4 border-b border-slate-100">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 1. Destination College */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                <span>Destination College / Institution</span>
+                <span className="text-rose-500">*</span>
+              </label>
+              <select
+                required
+                value={collegeName}
+                onChange={(e) => setCollegeName(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+              >
+                <option value="">-- Select Destination College / Institution --</option>
+                <option value="KIET Group of Institutions">KIET Group of Institutions</option>
+                <option value="ABES Engineering College">ABES Engineering College</option>
+                <option value="AKGEC Ghaziabad">AKGEC Ghaziabad</option>
+                <option value="Galgotias University">Galgotias University</option>
+                <option value="GL Bajaj Institute">GL Bajaj Institute</option>
+                {collegesList
+                  .filter(
+                    (c) =>
+                      ![
+                        'KIET Group of Institutions',
+                        'ABES Engineering College',
+                        'AKGEC Ghaziabad',
+                        'Galgotias University',
+                        'GL Bajaj Institute',
+                      ].includes(c)
+                  )
+                  .map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                <option value="__CUSTOM__">+ Other / Enter Custom College...</option>
+              </select>
 
-            {collegeName === '__CUSTOM__' && (
+              {collegeName === '__CUSTOM__' && (
+                <input
+                  type="text"
+                  required
+                  value={customCollege}
+                  onChange={(e) => setCustomCollege(e.target.value)}
+                  placeholder="Enter college / university name"
+                  className="mt-2 w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                />
+              )}
+            </div>
+
+            {/* 2. College Executive (Campus Ambassador) */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                  <span>College Executive (Ambassador)</span>
+                  <span className="text-rose-500">*</span>
+                </label>
+                {isLoadingTeam && (
+                  <span className="text-[10px] text-amber-600 animate-pulse font-medium">Filtering...</span>
+                )}
+              </div>
+
+              <select
+                required
+                disabled={!isCollegeSelected}
+                value={collegeExecutive}
+                onChange={(e) => setCollegeExecutive(e.target.value)}
+                className={`w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 ${
+                  !isCollegeSelected ? 'opacity-60 cursor-not-allowed' : ''
+                }`}
+              >
+                {!isCollegeSelected ? (
+                  <option value="">-- Select College First --</option>
+                ) : executives.length === 0 ? (
+                  <option value="">No registered ambassadors for this college</option>
+                ) : (
+                  <>
+                    <option value="">-- Select College Executive (Ambassador) --</option>
+                    {executives.map((u) => (
+                      <option key={u.userId} value={u.name}>
+                        {u.name} (@{u.userId}){u.phone ? ` • ${u.phone}` : ''}
+                      </option>
+                    ))}
+                  </>
+                )}
+                <option value="__CUSTOM__">+ Other / Enter Custom Executive Name...</option>
+              </select>
+
+              {(collegeExecutive === '__CUSTOM__' || (isCollegeSelected && executives.length === 0)) && (
+                <input
+                  type="text"
+                  required
+                  value={customExecutive}
+                  onChange={(e) => setCustomExecutive(e.target.value)}
+                  placeholder="Enter Executive / Campus Ambassador name"
+                  className="mt-2 w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                />
+              )}
+              <p className="text-[10px] text-slate-400 mt-1">
+                Campus Ambassador leading this college node who will receive the shipment.
+              </p>
+            </div>
+          </div>
+
+          {/* Date & Incharge Remarks Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <span>Dispatch Date</span>
+                <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="date"
+                required
+                value={dispatchDate}
+                onChange={(e) => setDispatchDate(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Dispatch Notes / Lab Incharge Remarks
+              </label>
               <input
                 type="text"
-                required
-                value={customCollege}
-                onChange={(e) => setCustomCollege(e.target.value)}
-                placeholder="Enter college / university name"
-                className="mt-2 w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="e.g. For IoT Lab Workshop / Approved by HOD"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
               />
-            )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Dispatch Date <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="date"
-              required
-              value={dispatchDate}
-              onChange={(e) => setDispatchDate(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Dispatch Notes / Lab Incharge
-            </label>
-            <input
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. For IoT Lab Workshop / Prof. Sharma"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-            />
+            </div>
           </div>
         </div>
 
@@ -340,7 +464,7 @@ export const CollegeDispatchView: React.FC = () => {
                   const available = prod ? prod.currentStock : 0;
                   const sending = Number(row.quantity) || 0;
                   const remaining = available - sending;
-                  const isInsufficient = sending > available;
+                  const isInsufficient = prod ? sending > available : false;
                   const unitCost = prod ? Number(prod.averageCost || 0) : 0;
                   const lineCost = sending * unitCost;
 
@@ -353,9 +477,16 @@ export const CollegeDispatchView: React.FC = () => {
                         <select
                           required
                           value={row.productId}
-                          onChange={(e) => updateItemRow(idx, 'productId', e.target.value)}
+                          onChange={(e) => {
+                            const newId = e.target.value;
+                            updateItemRow(idx, 'productId', newId);
+                            if (newId && (!row.quantity || row.quantity === 0)) {
+                              updateItemRow(idx, 'quantity', 1);
+                            }
+                          }}
                           className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
                         >
+                          <option value="">-- Select Component / Product --</option>
                           {products.map((p) => (
                             <option key={p._id} value={p._id}>
                               {p.name} ({p.sku}) — Available: {p.currentStock}
@@ -370,7 +501,7 @@ export const CollegeDispatchView: React.FC = () => {
                       </td>
 
                       <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-700">
-                        {available} units
+                        {prod ? `${available} units` : <span className="text-slate-400 font-normal">-</span>}
                       </td>
 
                       <td className="py-2.5 px-3 text-center">
@@ -378,18 +509,28 @@ export const CollegeDispatchView: React.FC = () => {
                           type="number"
                           min={1}
                           required
+                          disabled={!prod}
+                          placeholder={prod ? '1' : '-'}
                           value={row.quantity}
-                          onChange={(e) => updateItemRow(idx, 'quantity', parseInt(e.target.value) || 0)}
+                          onChange={(e) =>
+                            updateItemRow(
+                              idx,
+                              'quantity',
+                              e.target.value === '' ? '' : parseInt(e.target.value) || 0
+                            )
+                          }
                           className={`w-full px-2.5 py-1.5 bg-white border rounded-lg text-xs font-mono font-bold text-center focus:outline-none focus:ring-1 ${
                             isInsufficient
                               ? 'border-rose-300 text-rose-700 focus:ring-rose-500'
                               : 'border-slate-200 text-slate-800 focus:ring-amber-500'
-                          }`}
+                          } ${!prod ? 'bg-slate-50 opacity-60 cursor-not-allowed' : ''}`}
                         />
                       </td>
 
                       <td className="py-2.5 px-3 text-center">
-                        {isInsufficient ? (
+                        {!prod ? (
+                          <span className="text-slate-400 text-[11px]">-</span>
+                        ) : isInsufficient ? (
                           <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold border border-rose-200">
                             <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
                             <span>Insufficient ({available})</span>
@@ -403,7 +544,7 @@ export const CollegeDispatchView: React.FC = () => {
                       </td>
 
                       <td className="py-2.5 px-4 text-right font-mono font-bold text-slate-900">
-                        ₹{lineCost.toLocaleString('en-IN')}
+                        {prod && sending > 0 ? `₹${lineCost.toLocaleString('en-IN')}` : '₹0'}
                       </td>
 
                       <td className="py-2.5 px-2 text-center">
@@ -444,13 +585,13 @@ export const CollegeDispatchView: React.FC = () => {
             {hasInsufficientStock && (
               <span className="text-xs font-semibold text-rose-600 flex items-center gap-1">
                 <AlertTriangle className="w-4 h-4" />
-                <span>Fix stock shortage before dispatching</span>
+                <span>Selected quantity exceeds available stock</span>
               </span>
             )}
 
             <button
               type="submit"
-              disabled={hasInsufficientStock || totalUnits <= 0}
+              disabled={hasInsufficientStock || !hasValidItems || !isCollegeSelected || !isExecutiveSelected}
               className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm transition disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
             >
               <Truck className="w-4 h-4" />
@@ -474,8 +615,15 @@ export const CollegeDispatchView: React.FC = () => {
           <div className="space-y-4">
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5 text-xs text-amber-900">
               <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-600">Destination:</span>
+                <span className="font-semibold text-slate-600">Destination College:</span>
                 <span className="font-bold text-slate-900">{getSelectedCollege()}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-600">College Executive (Ambassador):</span>
+                <span className="font-bold text-blue-700 flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>{getSelectedExecutive()}</span>
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-slate-600">Dispatch Date:</span>
@@ -597,6 +745,7 @@ export const CollegeDispatchView: React.FC = () => {
                 <th className="py-3 px-4">Date</th>
                 <th className="py-3 px-4">Dispatch #</th>
                 <th className="py-3 px-4">College</th>
+                <th className="py-3 px-4">College Executive / Recipient</th>
                 <th className="py-3 px-4">Products & Units</th>
                 <th className="py-3 px-4 text-center">Total Units</th>
                 <th className="py-3 px-4 text-right">Total Cost</th>
@@ -634,6 +783,19 @@ export const CollegeDispatchView: React.FC = () => {
 
                     <td className="py-3 px-4 font-semibold text-slate-800">
                       {d.college}
+                    </td>
+
+                    <td className="py-3 px-4">
+                      <div className="font-semibold text-slate-800 flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span className="truncate max-w-[130px]">{d.collegeExecutive || 'Unassigned'}</span>
+                      </div>
+                      {d.deliveryAgent && (
+                        <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                          <UserCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                          <span className="truncate max-w-[130px]">{d.deliveryAgent}</span>
+                        </div>
+                      )}
                     </td>
 
                     <td className="py-3 px-4">
@@ -692,10 +854,18 @@ export const CollegeDispatchView: React.FC = () => {
           maxWidth="lg"
         >
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
               <div>
                 <span className="text-slate-400 font-semibold block uppercase text-[10px]">College</span>
                 <span className="font-bold text-slate-800 mt-0.5 block">{inspectingDispatch.college}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 font-semibold block uppercase text-[10px]">College Executive</span>
+                <span className="font-bold text-amber-900 mt-0.5 block">{inspectingDispatch.collegeExecutive || 'Unassigned'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 font-semibold block uppercase text-[10px]">Distributive Agent</span>
+                <span className="font-medium text-slate-700 mt-0.5 block">{inspectingDispatch.deliveryAgent || 'Direct to Executive'}</span>
               </div>
               <div>
                 <span className="text-slate-400 font-semibold block uppercase text-[10px]">Total Cost</span>

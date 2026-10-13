@@ -197,10 +197,16 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       }
     }
 
-    if (!name || !category || sellingPrice === undefined) {
+    const resolvedCategory = (category && String(category).trim()) || 'General';
+    const resolvedSellingPrice =
+      sellingPrice !== undefined && sellingPrice !== null && sellingPrice !== ''
+        ? Math.max(0, Number(sellingPrice))
+        : 0;
+
+    if (!name || !String(name).trim()) {
       res.status(400).json({
         success: false,
-        message: 'Product Name, Category, and Selling Price are required.',
+        message: 'Product Name is required.',
       });
       return;
     }
@@ -208,7 +214,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
     // Auto-generate SKU if user didn't specify one
     let cleanSku = sku ? sku.toUpperCase().trim() : '';
     if (!cleanSku) {
-      const catPrefix = category.slice(0, 3).toUpperCase().replace(/[^A-Z]/g, 'X') || 'ITM';
+      const catPrefix = resolvedCategory.slice(0, 3).toUpperCase().replace(/[^A-Z]/g, 'X') || 'ITM';
       const namePart = name.slice(0, 3).toUpperCase().replace(/[^A-Z]/g, 'X') || 'PRD';
       const randHex = Math.floor(1000 + Math.random() * 9000);
       cleanSku = `${catPrefix}-${namePart}-${randHex}`;
@@ -226,7 +232,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
     const product = new Product({
       name: name.trim(),
       sku: cleanSku,
-      category: category.trim(),
+      category: resolvedCategory,
       brand: brand?.trim(),
       modelNumber: modelNumber?.trim(),
       description: description?.trim(),
@@ -240,7 +246,7 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       specifications: specifications || {},
       tags: tags || [],
       notes: notes?.trim(),
-      sellingPrice: Number(sellingPrice),
+      sellingPrice: resolvedSellingPrice,
       averageCost: cp,
       isArchived: false,
     });

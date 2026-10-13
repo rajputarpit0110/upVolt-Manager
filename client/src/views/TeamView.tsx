@@ -1,15 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { UserCheck, Plus, KeyRound, ShieldCheck, UserX, Check, Lock } from 'lucide-react';
+import { UserCheck, Plus, KeyRound, ShieldCheck, UserX, Check, Lock, Building2 } from 'lucide-react';
 import { User, Role } from '../types';
-import { userApi } from '../api/client';
+import { userApi, collegeApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Common/Toast';
 import { Modal } from '../components/Common/Modal';
 
 export const TeamView: React.FC = () => {
-  const { isMasterAdmin } = useAuth();
+  const { user: currentUser, isMasterAdmin } = useAuth();
   const { success, error } = useToast();
   const [users, setUsers] = useState<User[]>([]);
+  const [collegesList, setCollegesList] = useState<string[]>([
+    'KIET Group of Institutions',
+    'ABES Engineering College',
+    'AKGEC Ghaziabad',
+    'Galgotias University',
+    'GL Bajaj Institute',
+    'IIT Bombay',
+  ]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Create User Modal
@@ -18,8 +26,8 @@ export const TeamView: React.FC = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<Role>('MEMBER');
-  const [college, setCollege] = useState('KIET Group of Institutions');
+  const [role, setRole] = useState<Role>(isMasterAdmin ? 'MEMBER' : 'COLLEGE_MEMBER');
+  const [college, setCollege] = useState('');
   const [customCollege, setCustomCollege] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -29,10 +37,20 @@ export const TeamView: React.FC = () => {
   const [isResetting, setIsResetting] = useState(false);
 
   useEffect(() => {
-    if (isMasterAdmin) {
-      loadUsers();
+    loadUsers();
+    loadColleges();
+  }, []);
+
+  const loadColleges = async () => {
+    try {
+      const res = await collegeApi.getColleges();
+      if (res.success && res.colleges && res.colleges.length > 0) {
+        setCollegesList(res.colleges);
+      }
+    } catch (e) {
+      // Fallback already in initial state
     }
-  }, [isMasterAdmin]);
+  };
 
   const loadUsers = async () => {
     setIsLoading(true);
@@ -44,6 +62,17 @@ export const TeamView: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleOpenCreateModal = () => {
+    setUsername('');
+    setName('');
+    setEmail('');
+    setPassword('');
+    setRole(isMasterAdmin ? 'MEMBER' : 'COLLEGE_MEMBER');
+    setCollege('');
+    setCustomCollege('');
+    setIsCreateModalOpen(true);
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -59,12 +88,24 @@ export const TeamView: React.FC = () => {
           ? customCollege.trim()
           : college.trim()
         : undefined;
-    if (role === 'COLLEGE_MEMBER' && !assignedCollege) {
-      error('Please select or specify a college for the College Member account.', 'College Required');
+
+    // Both College Executive and Distributive Agent strictly require a college
+    if ((role === 'COLLEGE_MEMBER' || role === 'CAMPUS_EXECUTIVE') && !assignedCollege) {
+      error(
+        `Please select or specify the target college for this ${
+          role === 'COLLEGE_MEMBER' ? 'College Executive' : 'Campus Distributive Agent'
+        }.`,
+        'College Required'
+      );
       return;
     }
 
-    if (role === 'MASTER_ADMIN' && !window.confirm(`Are you sure you want to create "${name}" as a MASTER ADMIN? This user will have full destructive privileges and access to all financial data.`)) {
+    if (
+      role === 'MASTER_ADMIN' &&
+      !window.confirm(
+        `Are you sure you want to create "${name}" as a MASTER ADMIN? This user will have full destructive privileges and access to all financial data.`
+      )
+    ) {
       return;
     }
 
@@ -81,13 +122,13 @@ export const TeamView: React.FC = () => {
       });
 
       if (res.success) {
-        success(`User ${name} (@${username}) created successfully.`, 'Team Member Added');
+        success(`User ${name} (@${username}) created successfully.`, 'Personnel Account Created');
         setIsCreateModalOpen(false);
         setUsername('');
         setName('');
         setEmail('');
         setPassword('');
-        setCollege('KIET Group of Institutions');
+        setCollege('');
         setCustomCollege('');
         loadUsers();
       }
@@ -136,14 +177,23 @@ export const TeamView: React.FC = () => {
     }
   };
 
-  if (!isMasterAdmin) {
+  const canManageUser = (target: User) => {
+    if (target.userId === currentUser?.userId) return false;
+    if (isMasterAdmin) return true;
+    // Members can only manage College Executives and Distributive Agents
+    return target.role === 'COLLEGE_MEMBER' || target.role === 'CAMPUS_EXECUTIVE';
+  };
+
+  const isAuthorized =
+    isMasterAdmin || currentUser?.role === 'MEMBER' || currentUser?.role === 'STAFF';
+
+  if (!isAuthorized) {
     return (
       <div className="p-8 bg-white rounded-xl border border-slate-200 text-center space-y-3">
         <Lock className="w-10 h-10 text-slate-400 mx-auto" />
-        <h2 className="text-base font-bold text-slate-900">Master Admin Privilege Required</h2>
+        <h2 className="text-base font-bold text-slate-900">Access Restricted</h2>
         <p className="text-xs text-slate-500 max-w-md mx-auto">
-          Only Master Admin can manage company users, create staff credentials, and reset
-          passwords.
+          You do not have permission to view team accounts or manage campus personnel.
         </p>
       </div>
     );
@@ -153,18 +203,20 @@ export const TeamView: React.FC = () => {
     <div className="space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Team & Access Control</h1>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Team & Campus Personnel</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Manage user accounts, RBAC permissions, and password credentials.
+            {isMasterAdmin
+              ? 'Manage user accounts, RBAC permissions, and password credentials.'
+              : 'Create and manage College Executives (Ambassadors) and Campus Distributive Agents.'}
           </p>
         </div>
 
         <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs shadow-sm transition shrink-0"
+          onClick={handleOpenCreateModal}
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shadow-sm transition shrink-0"
         >
-          <Plus className="w-4 h-4" />
-          <span>Add Team Member</span>
+          <Plus className="w-4 h-4 stroke-[2.5]" />
+          <span>{isMasterAdmin ? 'Add Team Member' : 'Add College Executive / Agent'}</span>
         </button>
       </div>
 
@@ -215,7 +267,7 @@ export const TeamView: React.FC = () => {
                         {u.role === 'MASTER_ADMIN'
                           ? 'Master Admin'
                           : u.role === 'CAMPUS_EXECUTIVE'
-                          ? `Campus Executive${u.college ? ` (${u.college})` : ''}`
+                          ? `Campus Distributive Agent${u.college ? ` (${u.college})` : ''}`
                           : u.role === 'COLLEGE_MEMBER'
                           ? `College Member (${u.college})`
                           : 'Member'}
@@ -242,27 +294,35 @@ export const TeamView: React.FC = () => {
 
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => {
-                            setUserToReset(u);
-                            setNewPassword('');
-                          }}
-                          className="px-2.5 py-1 rounded text-slate-600 hover:bg-slate-100 font-medium text-[11px] flex items-center gap-1 transition"
-                        >
-                          <KeyRound className="w-3.5 h-3.5 text-slate-400" />
-                          <span>Reset Password</span>
-                        </button>
+                        {canManageUser(u) ? (
+                          <>
+                            <button
+                              onClick={() => {
+                                setUserToReset(u);
+                                setNewPassword('');
+                              }}
+                              className="px-2.5 py-1 rounded text-slate-600 hover:bg-slate-100 font-medium text-[11px] flex items-center gap-1 transition"
+                            >
+                              <KeyRound className="w-3.5 h-3.5 text-slate-400" />
+                              <span>Reset Password</span>
+                            </button>
 
-                        <button
-                          onClick={() => handleToggleActive(u)}
-                          className={`px-2.5 py-1 rounded font-medium text-[11px] transition ${
-                            u.isActive
-                              ? 'text-rose-600 hover:bg-rose-50'
-                              : 'text-emerald-600 hover:bg-emerald-50'
-                          }`}
-                        >
-                          {u.isActive ? 'Disable' : 'Enable'}
-                        </button>
+                            <button
+                              onClick={() => handleToggleActive(u)}
+                              className={`px-2.5 py-1 rounded font-medium text-[11px] transition ${
+                                u.isActive
+                                  ? 'text-rose-600 hover:bg-rose-50'
+                                  : 'text-emerald-600 hover:bg-emerald-50'
+                              }`}
+                            >
+                              {u.isActive ? 'Disable' : 'Enable'}
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-medium px-2 py-0.5 rounded bg-slate-50 border border-slate-150">
+                            {u.userId === currentUser?.userId ? 'Current User' : 'Protected'}
+                          </span>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -346,28 +406,62 @@ export const TeamView: React.FC = () => {
               onChange={(e: any) => setRole(e.target.value)}
               className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800"
             >
-              <option value="MEMBER">Member (Operational access; inventory & orders)</option>
-              <option value="CAMPUS_EXECUTIVE">Campus Executive (Direct student handovers & personal deliveries only)</option>
-              <option value="COLLEGE_MEMBER">College Member (Strictly scoped to their college inventory)</option>
-              <option value="MASTER_ADMIN">Master Admin (Complete permissions & soft-delete)</option>
+              {!isMasterAdmin ? (
+                <>
+                  <option value="COLLEGE_MEMBER">College Executive / Campus Ambassador (College Node Lead)</option>
+                  <option value="CAMPUS_EXECUTIVE">Campus Distributive Agent (On-ground student kit handovers)</option>
+                </>
+              ) : (
+                <>
+                  <option value="MEMBER">Member (Operational access; inventory & orders)</option>
+                  <option value="COLLEGE_MEMBER">College Executive / Campus Ambassador (College Node Lead)</option>
+                  <option value="CAMPUS_EXECUTIVE">Campus Distributive Agent (On-ground student kit handovers)</option>
+                  <option value="MASTER_ADMIN">Master Admin (Complete permissions & soft-delete)</option>
+                </>
+              )}
             </select>
           </div>
 
           {(role === 'COLLEGE_MEMBER' || role === 'CAMPUS_EXECUTIVE') && (
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Assigned College {role === 'COLLEGE_MEMBER' ? <span className="text-rose-500">*</span> : <span className="text-slate-400 font-normal">(Optional default campus)</span>}
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Target College / Campus</span>
+                  <span className="text-rose-500">*</span>
+                </label>
+                <span className="text-[10px] text-amber-700 font-medium bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                  Required for {role === 'COLLEGE_MEMBER' ? 'College Executive' : 'Distributive Agent'}
+                </span>
+              </div>
               <select
+                required
                 value={college}
                 onChange={(e) => setCollege(e.target.value)}
-                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
               >
+                <option value="">-- Select Target College --</option>
                 <option value="KIET Group of Institutions">KIET Group of Institutions</option>
                 <option value="ABES Engineering College">ABES Engineering College</option>
                 <option value="AKGEC Ghaziabad">AKGEC Ghaziabad</option>
                 <option value="Galgotias University">Galgotias University</option>
                 <option value="GL Bajaj Institute">GL Bajaj Institute</option>
+                {collegesList
+                  .filter(
+                    (c) =>
+                      ![
+                        'KIET Group of Institutions',
+                        'ABES Engineering College',
+                        'AKGEC Ghaziabad',
+                        'Galgotias University',
+                        'GL Bajaj Institute',
+                      ].includes(c)
+                  )
+                  .map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
                 <option value="__CUSTOM__">+ Other / Enter Custom College...</option>
               </select>
 
@@ -377,10 +471,13 @@ export const TeamView: React.FC = () => {
                   required
                   value={customCollege}
                   onChange={(e) => setCustomCollege(e.target.value)}
-                  placeholder="Enter college name"
-                  className="mt-2 w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800"
+                  placeholder="Enter target college / university name"
+                  className="mt-2 w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                 />
               )}
+              <p className="text-[10px] text-slate-400 mt-1">
+                This {role === 'COLLEGE_MEMBER' ? 'College Executive' : 'Campus Distributive Agent'} will be mapped strictly to this campus.
+              </p>
             </div>
           )}
 

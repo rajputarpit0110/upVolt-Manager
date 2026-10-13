@@ -4,6 +4,9 @@ import { OrderVersion } from '../models/OrderVersion';
 import { OrderReturn } from '../models/OrderReturn';
 import { Product } from '../models/Product';
 import { Customer } from '../models/Customer';
+import { CollegeInventory } from '../models/CollegeInventory';
+import { User } from '../models/User';
+import { StockMovement } from '../models/StockMovement';
 import { deductOrderStock, restoreOrderStock, reserveStock, releaseReservedStock } from './inventoryService';
 import { createAuditLog } from './auditService';
 
@@ -36,6 +39,10 @@ export interface ICreateOrderInput {
   notes?: string;
   idempotencyKey?: string;
   deliveryInfo?: any;
+  college?: string;
+  source?: 'Website' | 'Direct' | 'Manual';
+  webOrderNumber?: string;
+  assignedAgentUserId?: string;
 }
 
 export async function generateOrderNumber(): Promise<string> {
@@ -95,6 +102,12 @@ export async function createOrder(
   const status = input.status || 'Confirmed';
   const shouldDeductStock = status !== 'Draft';
 
+  const targetCollege =
+    input.college ||
+    (user.role === 'COLLEGE_MEMBER' || user.role === 'CAMPUS_EXECUTIVE'
+      ? (user as any).college
+      : input.customer?.college);
+
   const processedItems: IOrderItem[] = [];
   let subtotal = 0;
   let totalOrderDiscount = 0;
@@ -102,6 +115,7 @@ export async function createOrder(
 
   // Track operations for rollback in case an item in multi-product order fails
   const allocatedOperations: { productId: string; allocations: any[] }[] = [];
+  const collegeDeductions: { collegeItemId: any; quantity: number }[] = [];
 
   try {
     for (const rawItem of input.items) {
@@ -120,38 +134,98 @@ export async function createOrder(
       totalOrderDiscount += itemDiscount;
 
       if (shouldDeductStock) {
-        // Physical stock deduction with FIFO batch allocation
-        const deduction = await deductOrderStock({
-          productId: rawItem.productId,
-          quantity: rawItem.quantity,
-          sellingPrice: rawItem.sellingPrice,
-          orderNumber,
-          performedBy: user.userId,
-        });
+        if (targetCollege) {
+          // Campus Order: Deduct from College Lab Inventory
+          const collegeItem = await CollegeInventory.findOne({
+            college: targetCollege.trim(),
+            productId: rawItem.productId,
+          });
 
-        allocatedOperations.push({
-          productId: rawItem.productId,
-          allocations: deduction.allocations,
-        });
+          if (!collegeItem || collegeItem.currentStock < rawItem.quantity) {
+            const available = collegeItem ? collegeItem.currentStock : 0;
+            throw new Error(
+              `Insufficient campus stock for "${product.name}" in ${targetCollege}. Lab inventory has ${available} unit(s) available, but ${rawItem.quantity} were requested.`
+            );
+          }
 
-        const lineCogs = deduction.totalCogs;
-        const lineProfit = lineRevenue - lineCogs;
-        const lineMargin = lineRevenue > 0 ? (lineProfit / lineRevenue) * 100 : 0;
-        totalCost += lineCogs;
+          await CollegeInventory.updateOne(
+            { _id: collegeItem._id },
+            { $inc: { currentStock: -rawItem.quantity } }
+          );
 
-        processedItems.push({
-          productId: product._id as mongoose.Types.ObjectId,
-          productName: product.name,
-          sku: product.sku,
-          quantity: rawItem.quantity,
-          sellingPrice: rawItem.sellingPrice,
-          discount: itemDiscount,
-          revenue: Math.round(lineRevenue * 100) / 100,
-          cogs: Math.round(lineCogs * 100) / 100,
-          profit: Math.round(lineProfit * 100) / 100,
-          margin: Math.round(lineMargin * 100) / 100,
-          batchAllocations: deduction.allocations,
-        });
+          collegeDeductions.push({
+            collegeItemId: collegeItem._id,
+            quantity: rawItem.quantity,
+          });
+
+          const unitCost = product.averageCost || (product as any).costPrice || 0;
+          const lineCogs = Math.round(unitCost * rawItem.quantity * 100) / 100;
+          const lineProfit = Math.round((lineRevenue - lineCogs) * 100) / 100;
+          const lineMargin = lineRevenue > 0 ? Math.round((lineProfit / lineRevenue) * 10000) / 100 : 0;
+          totalCost += lineCogs;
+
+          // Record campus stock movement
+          await StockMovement.create({
+            productId: product._id,
+            movementType: 'SALE',
+            quantity: -rawItem.quantity,
+            previousStock: collegeItem.currentStock,
+            newStock: collegeItem.currentStock - rawItem.quantity,
+            referenceType: 'ORDER',
+            referenceId: orderNumber,
+            costPrice: unitCost,
+            sellingPrice: rawItem.sellingPrice,
+            performedBy: user.userId,
+            notes: `Campus Order fulfillment for ${targetCollege}. Customer: ${input.customer?.name || 'Student'}`,
+          });
+
+          processedItems.push({
+            productId: product._id as mongoose.Types.ObjectId,
+            productName: product.name,
+            sku: product.sku,
+            quantity: rawItem.quantity,
+            sellingPrice: rawItem.sellingPrice,
+            discount: itemDiscount,
+            revenue: Math.round(lineRevenue * 100) / 100,
+            cogs: lineCogs,
+            profit: lineProfit,
+            margin: lineMargin,
+            batchAllocations: [],
+          });
+        } else {
+          // Central Warehouse Order: Physical stock deduction with FIFO batch allocation
+          const deduction = await deductOrderStock({
+            productId: rawItem.productId,
+            quantity: rawItem.quantity,
+            sellingPrice: rawItem.sellingPrice,
+            orderNumber,
+            performedBy: user.userId,
+          });
+
+          allocatedOperations.push({
+            productId: rawItem.productId,
+            allocations: deduction.allocations,
+          });
+
+          const lineCogs = deduction.totalCogs;
+          const lineProfit = lineRevenue - lineCogs;
+          const lineMargin = lineRevenue > 0 ? (lineProfit / lineRevenue) * 100 : 0;
+          totalCost += lineCogs;
+
+          processedItems.push({
+            productId: product._id as mongoose.Types.ObjectId,
+            productName: product.name,
+            sku: product.sku,
+            quantity: rawItem.quantity,
+            sellingPrice: rawItem.sellingPrice,
+            discount: itemDiscount,
+            revenue: Math.round(lineRevenue * 100) / 100,
+            cogs: Math.round(lineCogs * 100) / 100,
+            profit: Math.round(lineProfit * 100) / 100,
+            margin: Math.round(lineMargin * 100) / 100,
+            batchAllocations: deduction.allocations,
+          });
+        }
       } else {
         // Draft order: reserve stock without physical deduction
         await reserveStock(rawItem.productId, rawItem.quantity, orderNumber, user.userId);
@@ -172,7 +246,7 @@ export async function createOrder(
       }
     }
   } catch (error: any) {
-    // Rollback any stock deducted so far for previous items in this order
+    // Rollback central batches
     for (const op of allocatedOperations) {
       await restoreOrderStock(
         op.productId,
@@ -181,6 +255,13 @@ export async function createOrder(
         'MANUAL_CORRECTION',
         user.userId,
         'Rollback due to order creation failure'
+      );
+    }
+    // Rollback campus inventory
+    for (const cd of collegeDeductions) {
+      await CollegeInventory.updateOne(
+        { _id: cd.collegeItemId },
+        { $inc: { currentStock: cd.quantity } }
       );
     }
     throw error;
@@ -192,6 +273,27 @@ export async function createOrder(
   const grossMargin = totalAmount > 0 && shouldDeductStock ? (totalProfit / totalAmount) * 100 : 0;
   const amountPaid = input.amountPaid || 0;
   const amountDue = Math.max(0, totalAmount - amountPaid);
+
+  let assignedAgent: any = undefined;
+  const deliveryInfo = { ...(input.deliveryInfo || {}) };
+
+  if (input.assignedAgentUserId) {
+    const agent = await User.findOne({ userId: input.assignedAgentUserId, isActive: true });
+    if (agent) {
+      assignedAgent = {
+        userId: agent.userId,
+        name: agent.name,
+        phone: agent.phone,
+        assignedAt: new Date(),
+        assignedBy: user.name,
+      };
+      deliveryInfo.deliveredBy = agent.name;
+    }
+  }
+
+  if (targetCollege) {
+    deliveryInfo.college = targetCollege.trim();
+  }
 
   const order = new Order({
     orderNumber,
@@ -212,7 +314,11 @@ export async function createOrder(
     amountDue,
     stockDeducted: shouldDeductStock,
     stockReserved: !shouldDeductStock,
-    deliveryInfo: input.deliveryInfo,
+    deliveryInfo,
+    college: targetCollege ? targetCollege.trim() : undefined,
+    source: input.source || (targetCollege ? 'Website' : 'Direct'),
+    webOrderNumber: input.webOrderNumber?.trim() || undefined,
+    assignedAgent,
     currentVersion: 1,
     createdBy: user.userId,
     updatedBy: user.userId,
@@ -813,15 +919,33 @@ export async function cancelOrder(
 
   // Restore physical inventory if stock was deducted
   if (order.stockDeducted) {
-    for (const item of order.items) {
-      await restoreOrderStock(
-        item.productId,
-        item.batchAllocations,
-        order.orderNumber,
-        'ORDER_CANCEL',
-        user.userId,
-        `Cancellation: Restored ${item.quantity} units for Order #${order.orderNumber}. Reason: ${reason}`
-      );
+    if (order.college) {
+      for (const item of order.items) {
+        await CollegeInventory.updateOne(
+          { college: order.college, productId: item.productId },
+          { $inc: { currentStock: item.quantity } }
+        );
+        await StockMovement.create({
+          productId: item.productId,
+          movementType: 'RETURN',
+          quantity: item.quantity,
+          referenceType: 'ORDER',
+          referenceId: order.orderNumber,
+          performedBy: user.userId,
+          notes: `Cancellation: Restored ${item.quantity} units to ${order.college} campus inventory. Reason: ${reason}`,
+        });
+      }
+    } else {
+      for (const item of order.items) {
+        await restoreOrderStock(
+          item.productId,
+          item.batchAllocations,
+          order.orderNumber,
+          'ORDER_CANCEL',
+          user.userId,
+          `Cancellation: Restored ${item.quantity} units for Order #${order.orderNumber}. Reason: ${reason}`
+        );
+      }
     }
     order.stockDeducted = false;
   }
@@ -1128,3 +1252,114 @@ export async function permanentlyDeleteOrder(
     ip,
   });
 }
+
+/**
+ * Assigns or unassigns a Campus Distributive Agent to an order
+ */
+export async function assignOrderAgent(
+  orderId: string,
+  agentUserId: string | null | undefined,
+  user: { userId: string; name: string; role: string; college?: string },
+  ip?: string
+): Promise<IOrder> {
+  const order = await Order.findById(orderId);
+  if (!order) throw new Error('Order not found');
+
+  if (user.role === 'COLLEGE_MEMBER') {
+    if (order.college && user.college && order.college.trim().toLowerCase() !== user.college.trim().toLowerCase()) {
+      throw new Error('Access denied: You can only assign orders belonging to your college.');
+    }
+  }
+
+  const oldAgent = order.assignedAgent?.name || 'Unassigned';
+
+  if (!agentUserId) {
+    order.assignedAgent = undefined;
+    if (order.deliveryInfo) {
+      order.deliveryInfo.deliveredBy = undefined;
+    }
+    order.updatedBy = user.userId;
+    order.currentVersion += 1;
+    await order.save();
+
+    await createAuditLog({
+      userId: user.userId,
+      userName: user.name,
+      role: user.role,
+      action: 'ORDER_UPDATED',
+      entityType: 'ORDER',
+      entityId: order._id.toString(),
+      relatedOrderId: order.orderNumber,
+      ip,
+      previousState: { assignedAgent: oldAgent },
+      newState: { assignedAgent: null },
+      reason: `Unassigned distributive agent from order #${order.orderNumber}`,
+    });
+
+    return order;
+  }
+
+  const agent = await User.findOne({ userId: agentUserId, isActive: true });
+  if (!agent) {
+    throw new Error('Distributive agent not found or account is inactive.');
+  }
+
+  if (agent.role !== 'CAMPUS_EXECUTIVE') {
+    throw new Error('Assigned user must be a Campus Distributive Agent (CAMPUS_EXECUTIVE).');
+  }
+
+  const targetCollege = order.college || user.college;
+  if (targetCollege && agent.college && agent.college.trim().toLowerCase() !== targetCollege.trim().toLowerCase()) {
+    throw new Error(`Distributive Agent ${agent.name} is mapped to ${agent.college}, but this order belongs to ${targetCollege}.`);
+  }
+
+  order.assignedAgent = {
+    userId: agent.userId,
+    name: agent.name,
+    phone: agent.phone,
+    assignedAt: new Date(),
+    assignedBy: user.name,
+  };
+
+  if (!order.deliveryInfo) {
+    order.deliveryInfo = {};
+  }
+  order.deliveryInfo.deliveredBy = agent.name;
+  if (agent.college) {
+    order.deliveryInfo.college = agent.college;
+  }
+
+  if (order.status === 'Draft') {
+    order.status = 'Confirmed';
+  }
+
+  order.updatedBy = user.userId;
+  order.currentVersion += 1;
+  await order.save();
+
+  await new OrderVersion({
+    orderId: order._id,
+    version: order.currentVersion,
+    snapshot: order.toObject(),
+    diff: [{ field: 'assignedAgent', oldValue: oldAgent, newValue: agent.name }],
+    changedBy: user.userId,
+    changeReason: `Assigned to Distributive Agent: ${agent.name}`,
+  }).save();
+
+  await createAuditLog({
+    userId: user.userId,
+    userName: user.name,
+    role: user.role,
+    action: 'ORDER_UPDATED',
+    entityType: 'ORDER',
+    entityId: order._id.toString(),
+    relatedOrderId: order.orderNumber,
+    ip,
+    previousState: { assignedAgent: oldAgent },
+    newState: { assignedAgent: agent.name },
+    reason: `Assigned order #${order.orderNumber} to Distributive Agent ${agent.name} (${agent.userId})`,
+  });
+
+  return order;
+}
+

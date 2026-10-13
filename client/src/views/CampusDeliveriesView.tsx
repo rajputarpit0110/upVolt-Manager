@@ -159,17 +159,16 @@ export const CampusDeliveriesView: React.FC = () => {
   const handleOpenLogModal = () => {
     setStudentName('');
     setStudentPhone('');
-    setStudentCollege(user?.college || colleges[0] || 'KIET Group of Institutions');
+    setStudentCollege(user?.college || '');
     setCustomCollege('');
     setLocationNotes('');
     setDeliveryCharge(0);
     setPaymentMode('UPI');
     setDeliveryDate(new Date().toISOString().slice(0, 16));
 
-    // Default with 1 item row
+    // Default with 1 item row with empty selection
     if (products.length > 0) {
-      const first = products[0];
-      setItems([{ productId: first._id, quantity: 1, sellingPrice: first.sellingPrice }]);
+      setItems([{ productId: '', quantity: 1, sellingPrice: 0 }]);
     } else {
       setItems([]);
     }
@@ -178,9 +177,7 @@ export const CampusDeliveriesView: React.FC = () => {
   };
 
   const handleAddItem = () => {
-    if (products.length === 0) return;
-    const first = products[0];
-    setItems((prev) => [...prev, { productId: first._id, quantity: 1, sellingPrice: first.sellingPrice }]);
+    setItems((prev) => [...prev, { productId: '', quantity: 1, sellingPrice: 0 }]);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -340,7 +337,7 @@ export const CampusDeliveriesView: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              Campus Executive Active
+              Campus Distributive Agent Active
             </span>
             {user?.college && (
               <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-medium flex items-center gap-1">
@@ -691,6 +688,7 @@ export const CampusDeliveriesView: React.FC = () => {
                       onChange={(e) => setStudentCollege(e.target.value)}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
                     >
+                      <option value="">-- Select College --</option>
                       {colleges.map((c) => (
                         <option key={c} value={c}>
                           {c}
@@ -758,6 +756,7 @@ export const CampusDeliveriesView: React.FC = () => {
                             onChange={(e) => handleItemChange(idx, 'productId', e.target.value)}
                             className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded text-xs font-medium text-slate-800"
                           >
+                            <option value="">-- Select Product --</option>
                             {products.map((p) => (
                               <option key={p._id} value={p._id}>
                                 {p.name} (₹{p.sellingPrice}) — {p.currentStock} in stock

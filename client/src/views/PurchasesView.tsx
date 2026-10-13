@@ -81,16 +81,16 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
       products.length > 0
         ? [
             {
-              productId: products[0]._id,
+              productId: '',
               quantity: 1,
-              costPrice: products[0].averageCost || products[0].sellingPrice || 0,
+              costPrice: 0,
             },
           ]
         : []
     );
-    setSelectedSupplierId(suppliers[0]?._id || '');
-    setSupplierName(suppliers[0]?.name || '');
-    setSupplierPhone(suppliers[0]?.phone || '');
+    setSelectedSupplierId('');
+    setSupplierName('');
+    setSupplierPhone('');
     setInvoiceNumber('');
     setIsModalOpen(true);
   };
@@ -113,9 +113,9 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     setItems([
       ...items,
       {
-        productId: products[0]._id,
+        productId: '',
         quantity: 1,
-        costPrice: products[0].averageCost || products[0].sellingPrice || 0,
+        costPrice: 0,
       },
     ]);
   };
@@ -145,6 +145,10 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
     }
 
     for (const item of items) {
+      if (!item.productId) {
+        error('Please select a product for all line items', 'Product Required');
+        return;
+      }
       if (item.quantity <= 0) {
         error('Quantity must be greater than 0 for all items', 'Invalid Quantity');
         return;
@@ -444,6 +448,7 @@ export const PurchasesView: React.FC<PurchasesViewProps> = ({
                               onChange={(e) => updateItemRow(idx, 'productId', e.target.value)}
                               className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                             >
+                              <option value="">-- Select Product --</option>
                               {products.map((p) => (
                                 <option key={p._id} value={p._id}>
                                   {p.name} ({p.sku}) — Stock: {p.currentStock}

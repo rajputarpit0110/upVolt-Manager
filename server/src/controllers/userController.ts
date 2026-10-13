@@ -24,15 +24,29 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    if (role === 'COLLEGE_MEMBER' && (!college || !college.trim())) {
+    const requesterRole = req.user?.role;
+
+    // Permissions check: Members/Staff can only create College Executives or Campus Distributive Agents
+    if (requesterRole !== 'MASTER_ADMIN') {
+      if (role !== 'COLLEGE_MEMBER' && role !== 'CAMPUS_EXECUTIVE') {
+        res.status(403).json({
+          success: false,
+          message: 'Members are only authorized to create College Executives and Distributive Agents.',
+        });
+        return;
+      }
+    }
+
+    // Mandatory college selection for College Executive and Distributive Agent
+    if ((role === 'COLLEGE_MEMBER' || role === 'CAMPUS_EXECUTIVE') && (!college || !college.trim())) {
       res.status(400).json({
         success: false,
-        message: 'College is required for College Member accounts.',
+        message: 'Target college is required when creating a College Executive or Distributive Agent.',
       });
       return;
     }
 
-    if (role === 'MASTER_ADMIN' && req.user?.role !== 'MASTER_ADMIN') {
+    if (role === 'MASTER_ADMIN' && requesterRole !== 'MASTER_ADMIN') {
       res.status(403).json({
         success: false,
         message: 'Only existing Master Admins can create another Master Admin.',
@@ -116,8 +130,19 @@ export const toggleUserStatus = async (req: Request, res: Response): Promise<voi
     }
 
     if (user.userId === req.user?.userId) {
-      res.status(400).json({ success: false, message: 'Master Admin cannot deactivate their own account.' });
+      res.status(400).json({ success: false, message: 'You cannot deactivate your own account.' });
       return;
+    }
+
+    // Members can only manage College Executives and Distributive Agents
+    if (req.user?.role !== 'MASTER_ADMIN') {
+      if (user.role !== 'COLLEGE_MEMBER' && user.role !== 'CAMPUS_EXECUTIVE') {
+        res.status(403).json({
+          success: false,
+          message: 'Members are only authorized to manage College Executives and Distributive Agents.',
+        });
+        return;
+      }
     }
 
     user.isActive = !user.isActive;
@@ -138,6 +163,112 @@ export const toggleUserStatus = async (req: Request, res: Response): Promise<voi
       success: true,
       message: `User ${user.userId} has been ${user.isActive ? 'activated' : 'deactivated'}.`,
       user: { userId: user.userId, isActive: user.isActive },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
+
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found.' });
+      return;
+    }
+
+    if (req.user?.role !== 'MASTER_ADMIN') {
+      if (user.role !== 'COLLEGE_MEMBER' && user.role !== 'CAMPUS_EXECUTIVE') {
+        res.status(403).json({
+          success: false,
+          message: 'Members are only authorized to manage College Executives and Distributive Agents.',
+        });
+        return;
+      }
+    }
+
+    const { isActive, name, email, phone, college } = req.body;
+    if (typeof isActive === 'boolean') {
+      if (user.userId === req.user?.userId && !isActive) {
+        res.status(400).json({ success: false, message: 'You cannot deactivate your own account.' });
+        return;
+      }
+      user.isActive = isActive;
+    }
+    if (name) user.name = name.trim();
+    if (email !== undefined) user.email = email.trim();
+    if (phone !== undefined) user.phone = phone.trim();
+    if (college !== undefined) user.college = college.trim();
+
+    await user.save();
+
+    await createAuditLog({
+      userId: req.user!.userId,
+      userName: req.user!.name,
+      role: req.user!.role,
+      action: 'UPDATE_USER',
+      entityType: 'USER',
+      entityId: user._id.toString(),
+      newState: { userId: user.userId, isActive: user.isActive, name: user.name, college: user.college },
+      ip: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: `User ${user.userId} updated successfully.`,
+      user,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    const user = await User.findById(id);
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found.' });
+      return;
+    }
+
+    if (req.user?.role !== 'MASTER_ADMIN') {
+      if (user.role !== 'COLLEGE_MEMBER' && user.role !== 'CAMPUS_EXECUTIVE') {
+        res.status(403).json({
+          success: false,
+          message: 'Members can only reset passwords for College Executives and Distributive Agents.',
+        });
+        return;
+      }
+    }
+
+    if (!newPassword || newPassword.length < 6) {
+      res.status(400).json({ success: false, message: 'Password must be at least 6 characters long.' });
+      return;
+    }
+
+    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    user.forcePasswordChange = true;
+    await user.save();
+
+    await createAuditLog({
+      userId: req.user!.userId,
+      userName: req.user!.name,
+      role: req.user!.role,
+      action: 'RESET_PASSWORD',
+      entityType: 'USER',
+      entityId: user._id.toString(),
+      newState: { userId: user.userId },
+      ip: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: `Password for ${user.userId} has been reset successfully.`,
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

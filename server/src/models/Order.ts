@@ -81,6 +81,16 @@ export interface IOrder extends Document {
   stockDeducted: boolean;
   stockReserved: boolean;
   deliveryInfo?: IDeliveryInfo;
+  college?: string;
+  source?: 'Website' | 'Direct' | 'Manual';
+  webOrderNumber?: string;
+  assignedAgent?: {
+    userId: string;
+    name: string;
+    phone?: string;
+    assignedAt?: Date;
+    assignedBy?: string;
+  };
   isDeleted: boolean;
   deletedAt?: Date;
   deletedBy?: string;
@@ -194,6 +204,21 @@ const OrderSchema: Schema = new Schema(
       deliveredBy: { type: String, trim: true },
       trackingNumber: { type: String, trim: true },
       notes: { type: String, trim: true },
+    },
+    college: { type: String, trim: true, index: true },
+    source: {
+      type: String,
+      enum: ['Website', 'Direct', 'Manual'],
+      default: 'Direct',
+      index: true,
+    },
+    webOrderNumber: { type: String, trim: true, index: true },
+    assignedAgent: {
+      userId: { type: String, trim: true },
+      name: { type: String, trim: true },
+      phone: { type: String, trim: true },
+      assignedAt: { type: Date },
+      assignedBy: { type: String, trim: true },
     },
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: { type: Date },

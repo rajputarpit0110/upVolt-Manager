@@ -5,7 +5,9 @@ export interface User {
   userId: string;
   username: string;
   name: string;
-  email: string;
+  email?: string;
+  phone?: string;
+  department?: string;
   role: Role;
   college?: string;
   isActive: boolean;
@@ -26,6 +28,8 @@ export interface CollegeDispatch {
   _id: string;
   dispatchNumber: string;
   college: string;
+  collegeExecutive?: string;
+  deliveryAgent?: string;
   dispatchDate: string;
   items: CollegeDispatchItem[];
   totalUnits: number;
@@ -210,6 +214,7 @@ export interface Order {
     college?: string;
     organization?: string;
     shippingAddress?: string;
+    address?: string;
   };
   items: OrderItem[];
   subtotal: number;
@@ -229,10 +234,21 @@ export interface Order {
     customerName?: string;
     phone?: string;
     college?: string;
+    address?: string;
     deliveryDate?: string | Date;
     deliveredBy?: string;
     deliveryCharge?: number;
     notes?: string;
+  };
+  college?: string;
+  source?: 'Website' | 'Direct' | 'Manual';
+  webOrderNumber?: string;
+  assignedAgent?: {
+    userId: string;
+    name: string;
+    phone?: string;
+    assignedAt?: string;
+    assignedBy?: string;
   };
   currentVersion: number;
   createdBy: string;

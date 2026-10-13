@@ -119,9 +119,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     if (products.length > 0) {
       setItems([
         {
-          productId: products[0]._id,
+          productId: '',
           quantity: 1,
-          sellingPrice: products[0].sellingPrice,
+          sellingPrice: 0,
           discount: 0,
         },
       ]);
@@ -153,9 +153,9 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     setItems([
       ...items,
       {
-        productId: products[0]._id,
+        productId: '',
         quantity: 1,
-        sellingPrice: products[0].sellingPrice,
+        sellingPrice: 0,
         discount: 0,
       },
     ]);
@@ -190,6 +190,10 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
 
     // Check availability locally first for immediate feedback
     for (const item of items) {
+      if (!item.productId) {
+        error('Please select a product for all order items.', 'Validation Error');
+        return;
+      }
       const prod = products.find((p) => p._id === item.productId);
       if (prod) {
         const available = prod.currentStock - prod.reservedStock;
@@ -564,6 +568,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                               onChange={(e) => updateItemRow(idx, 'productId', e.target.value)}
                               className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800"
                             >
+                              <option value="">-- Select Product --</option>
                               {products.map((p) => (
                                 <option key={p._id} value={p._id}>
                                   {p.name} ({p.sku}) — Available: {p.currentStock - p.reservedStock}

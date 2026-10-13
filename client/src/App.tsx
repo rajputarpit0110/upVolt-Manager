@@ -27,7 +27,7 @@ import { Product, Order } from './types';
 const MainLayout: React.FC = () => {
   const { isAuthenticated, isLoading, isMasterAdmin, isCollegeMember, isCampusExecutive } = useAuth();
   const [activeTab, setActiveTab] = useState<NavTab>(() =>
-    isCollegeMember ? 'college_inventory' : isCampusExecutive ? 'campus_deliveries' : 'dashboard'
+    isCollegeMember ? 'college_orders' : isCampusExecutive ? 'campus_deliveries' : 'dashboard'
   );
 
   // Quick Action Modal states
@@ -105,7 +105,7 @@ const MainLayout: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0">
         <Topbar
           onOpenCreateOrder={() => {
-            setActiveTab('orders');
+            setActiveTab(isCollegeMember ? 'college_orders' : 'orders');
             setIsCreateOrderModalOpen(true);
           }}
           onOpenReceiveStock={() => {
@@ -125,9 +125,20 @@ const MainLayout: React.FC = () => {
           )}
 
           {/* College Member Views */}
-          {!isCampusExecutive && (activeTab === 'college_inventory' || activeTab === 'college_dispatches') && (
-            <CollegeMemberInventoryView />
-          )}
+          {!isCampusExecutive &&
+            (activeTab === 'college_orders' ||
+              activeTab === 'college_inventory' ||
+              activeTab === 'college_dispatches') && (
+              <CollegeMemberInventoryView
+                initialTab={
+                  activeTab === 'college_orders'
+                    ? 'orders'
+                    : activeTab === 'college_dispatches'
+                    ? 'received'
+                    : 'stock'
+                }
+              />
+            )}
 
           {/* Core Central Views */}
           {!isCampusExecutive && activeTab === 'dashboard' && (
