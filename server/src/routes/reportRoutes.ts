@@ -17,6 +17,7 @@ router.use(requireStaffOrAdmin);
 router.get('/dashboard', serverCacheMiddleware({ ttlSeconds: 30, tag: 'reports' }), getDashboard);
 router.get('/daily-activity', serverCacheMiddleware({ ttlSeconds: 30, tag: 'reports' }), getDailyActivity);
 router.get('/export', exportData);
+router.get('/export/:type', exportData);
 router.get('/integrity-check', requireMasterAdmin, getSystemIntegrity);
 router.post('/reconcile', requireMasterAdmin, reconcileDiscrepancies);
 

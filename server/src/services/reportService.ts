@@ -14,6 +14,11 @@ export function getDateRangeFilter(preset: string, customStart?: string, customE
   let end = new Date(now);
 
   switch (preset) {
+    case 'all':
+    case 'all_time':
+      start = new Date(0);
+      end.setHours(23, 59, 59, 999);
+      break;
     case 'today':
       start.setHours(0, 0, 0, 0);
       end.setHours(23, 59, 59, 999);

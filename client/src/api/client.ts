@@ -359,7 +359,10 @@ export const reportApi = {
   getDailyActivity: async (date?: string, options?: CacheOptions) => {
     return cachedGet<{ success: boolean; report: DailyActivityReport }>('/reports/daily-activity', { date }, options);
   },
-  exportCsv: async (entity: 'orders' | 'purchases' | 'products' | 'movements', params?: any) => {
+  exportCsv: async (
+    entity: string,
+    params?: { range?: string; startDate?: string; endDate?: string; format?: string }
+  ) => {
     const res = await api.get(`/reports/export/${entity}`, {
       params,
       responseType: 'blob',

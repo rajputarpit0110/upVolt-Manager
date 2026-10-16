@@ -142,13 +142,18 @@ export const reconcileDiscrepancies = async (req: Request, res: Response): Promi
 export const exportData = async (req: Request, res: Response): Promise<void> => {
   try {
     const isMasterAdmin = req.user?.role === 'MASTER_ADMIN';
-    const { type, range = 'this_month', startDate, endDate, format = 'csv' } = req.query;
-    const { start, end } = getDateRangeFilter(String(range), startDate as string, endDate as string);
+    const exportType = String(req.params.type || req.query.type || 'orders').toLowerCase();
+    const { range, startDate, endDate, format = 'csv' } = req.query;
+    
+    // If explicit start/end dates are provided, treat as custom range
+    const rangePreset = String(range || (startDate || endDate ? 'custom' : 'all_time'));
+    const { start, end } = getDateRangeFilter(rangePreset, startDate as string, endDate as string);
 
     let records: any[] = [];
-    let filename = `upvolt_${type}_${Date.now()}`;
+    const dateTag = startDate && endDate ? `${startDate}_to_${endDate}` : rangePreset;
+    const filename = `upvolt_${exportType}_${dateTag}`;
 
-    if (type === 'orders' || type === 'sales') {
+    if (exportType === 'orders' || exportType === 'sales') {
       const orders = await Order.find({
         orderDate: { $gte: start, $lte: end },
         isDeleted: false,
@@ -161,6 +166,7 @@ export const exportData = async (req: Request, res: Response): Promise<void> => 
         Phone: o.customer?.phone || '',
         College: o.customer?.college || '',
         ItemsCount: o.items.length,
+        ItemsSummary: o.items.map((i) => `${i.quantity}x ${i.productName}`).join('; '),
         ...(isMasterAdmin
           ? {
               Revenue: o.totalAmount,
@@ -169,11 +175,13 @@ export const exportData = async (req: Request, res: Response): Promise<void> => 
               GrossMarginPct: o.grossMargin,
             }
           : {}),
+        DeliveryCharge: o.deliveryCharge || 0,
         Status: o.status,
         PaymentStatus: o.paymentStatus,
         PaymentMethod: o.paymentMethod,
+        Source: o.source || 'Direct',
       }));
-    } else if (type === 'inventory' || type === 'products') {
+    } else if (exportType === 'inventory' || exportType === 'products') {
       const products = await Product.find({ isArchived: false }).sort({ name: 1 });
       records = products.map((p) => ({
         SKU: p.sku,
@@ -188,13 +196,13 @@ export const exportData = async (req: Request, res: Response): Promise<void> => 
         TotalInventoryValue: Math.round(p.currentStock * p.averageCost * 100) / 100,
         Location: p.locationShelf || '',
       }));
-    } else if (type === 'movements') {
+    } else if (exportType === 'movements') {
       const movements = await StockMovement.find({
         createdAt: { $gte: start, $lte: end },
       }).populate('productId', 'name sku').sort({ createdAt: -1 });
 
       records = movements.map((m) => ({
-        Date: m.createdAt.toISOString(),
+        Date: m.createdAt.toISOString().replace('T', ' ').slice(0, 19),
         Product: (m.productId as any)?.name || '',
         SKU: (m.productId as any)?.sku || '',
         Type: m.movementType,
@@ -207,7 +215,7 @@ export const exportData = async (req: Request, res: Response): Promise<void> => 
         PerformedBy: m.performedBy,
         Notes: m.notes || '',
       }));
-    } else if (type === 'purchases') {
+    } else if (exportType === 'purchases') {
       const purchases = await Purchase.find({
         purchaseDate: { $gte: start, $lte: end },
         isCancelled: false,
@@ -222,6 +230,32 @@ export const exportData = async (req: Request, res: Response): Promise<void> => 
         TotalAmount: p.totalAmount,
         PaymentStatus: p.paymentStatus,
         ReceivedBy: p.receivedBy,
+      }));
+    } else if (exportType === 'customers') {
+      const { Customer } = await import('../models/Customer');
+      const customers = await Customer.find({ createdAt: { $gte: start, $lte: end } }).sort({ name: 1 });
+      records = customers.map((c) => ({
+        Name: c.name,
+        Phone: c.phone || '',
+        Email: c.email || '',
+        College: c.college || '',
+        Category: c.category || '',
+        TotalOrders: c.totalOrders || 0,
+        TotalSpent: c.totalSpent || 0,
+        CreatedAt: c.createdAt ? c.createdAt.toISOString().split('T')[0] : '',
+      }));
+    } else if (exportType === 'suppliers') {
+      const { Supplier } = await import('../models/Supplier');
+      const suppliers = await Supplier.find({ createdAt: { $gte: start, $lte: end } }).sort({ name: 1 });
+      records = suppliers.map((s) => ({
+        Name: s.name,
+        ContactPerson: s.contactPerson || '',
+        Phone: s.phone || '',
+        Email: s.email || '',
+        Address: s.address || '',
+        GSTIN: s.gstin || '',
+        Status: s.isActive ? 'ACTIVE' : 'INACTIVE',
+        Notes: s.notes || '',
       }));
     }
 
