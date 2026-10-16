@@ -20,6 +20,10 @@ export interface IIntegrityCheckResult {
     totalMovementsChecked: number;
     totalOrdersChecked: number;
     discrepancyCount: number;
+    productsChecked?: number;
+    batchesChecked?: number;
+    movementsChecked?: number;
+    ordersChecked?: number;
   };
   discrepancies: IIntegrityDiscrepancy[];
 }
@@ -138,12 +142,69 @@ export async function runSystemIntegrityCheck(): Promise<IIntegrityCheckResult> 
     passed: discrepancies.length === 0,
     checkedAt: new Date(),
     summary: {
+      productsChecked: products.length,
       totalProductsChecked: products.length,
+      batchesChecked: batches.length,
       totalBatchesChecked: batches.length,
+      movementsChecked: movements.length,
       totalMovementsChecked: movements.length,
+      ordersChecked: orders.length,
       totalOrdersChecked: orders.length,
       discrepancyCount: discrepancies.length,
     },
     discrepancies,
+  };
+}
+
+/**
+ * Automatically creates opening stock FIFO batches for products whose
+ * physical stock exceeds the sum of active batch quantities.
+ */
+export async function autoReconcileDiscrepancies(): Promise<{
+  reconciledCount: number;
+  repairedProducts: Array<{ name: string; sku: string; unitsAdded: number; batchNumber: string }>;
+}> {
+  const products = await Product.find({ isArchived: false });
+  const batches = await InventoryBatch.find({ status: 'ACTIVE' });
+
+  const repairedProducts: Array<{ name: string; sku: string; unitsAdded: number; batchNumber: string }> = [];
+
+  for (const prod of products) {
+    if (prod.currentStock <= 0) continue;
+
+    const prodBatches = batches.filter((b) => b.productId.toString() === prod._id.toString());
+    const sumBatchRemaining = prodBatches.reduce((acc, b) => acc + b.remainingQuantity, 0);
+
+    const difference = prod.currentStock - sumBatchRemaining;
+    if (difference > 0) {
+      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const randHex = Math.floor(1000 + Math.random() * 9000);
+      const batchNumber = `BATCH-RECON-${dateStr}-${randHex}`;
+      const cp = prod.averageCost > 0 ? prod.averageCost : 0;
+
+      await InventoryBatch.create({
+        batchNumber,
+        productId: prod._id,
+        costPrice: cp,
+        initialQuantity: difference,
+        remainingQuantity: difference,
+        storageLocation: prod.locationShelf || 'Shelf General',
+        receivedDate: new Date(),
+        notes: `Auto-reconciled FIFO batch for opening physical stock (${difference} units)`,
+        status: 'ACTIVE',
+      });
+
+      repairedProducts.push({
+        name: prod.name,
+        sku: prod.sku,
+        unitsAdded: difference,
+        batchNumber,
+      });
+    }
+  }
+
+  return {
+    reconciledCount: repairedProducts.length,
+    repairedProducts,
   };
 }

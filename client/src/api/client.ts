@@ -352,6 +352,10 @@ export const reportApi = {
   getIntegrityCheck: async (options?: CacheOptions) => {
     return cachedGet<{ success: boolean; result: IntegrityCheckResult }>('/reports/integrity-check', undefined, options);
   },
+  reconcileIntegrity: async () => {
+    const res = await api.post<{ success: boolean; outcome: any; result: IntegrityCheckResult }>('/reports/reconcile');
+    return res.data;
+  },
   getDailyActivity: async (date?: string, options?: CacheOptions) => {
     return cachedGet<{ success: boolean; report: DailyActivityReport }>('/reports/daily-activity', { date }, options);
   },

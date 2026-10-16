@@ -3,6 +3,7 @@ import {
   getDashboard,
   getDailyActivity,
   getSystemIntegrity,
+  reconcileDiscrepancies,
   exportData,
 } from '../controllers/reportController';
 import { authenticateToken, requireMasterAdmin, requireStaffOrAdmin } from '../middlewares/auth';
@@ -17,5 +18,6 @@ router.get('/dashboard', serverCacheMiddleware({ ttlSeconds: 30, tag: 'reports' 
 router.get('/daily-activity', serverCacheMiddleware({ ttlSeconds: 30, tag: 'reports' }), getDailyActivity);
 router.get('/export', exportData);
 router.get('/integrity-check', requireMasterAdmin, getSystemIntegrity);
+router.post('/reconcile', requireMasterAdmin, reconcileDiscrepancies);
 
 export default router;

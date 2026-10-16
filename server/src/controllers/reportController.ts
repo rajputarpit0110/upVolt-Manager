@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { getDashboardMetrics, getDailyChangeReport, getDateRangeFilter } from '../services/reportService';
-import { runSystemIntegrityCheck } from '../services/reconciliationService';
+import { runSystemIntegrityCheck, autoReconcileDiscrepancies } from '../services/reconciliationService';
 import { Order } from '../models/Order';
 import { Product } from '../models/Product';
 import { StockMovement } from '../models/StockMovement';
@@ -121,6 +121,16 @@ export const getSystemIntegrity = async (req: Request, res: Response): Promise<v
   try {
     const result = await runSystemIntegrityCheck();
     res.json({ success: true, result });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const reconcileDiscrepancies = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const outcome = await autoReconcileDiscrepancies();
+    const result = await runSystemIntegrityCheck();
+    res.json({ success: true, outcome, result });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -9,6 +9,7 @@ import {
   Layers,
   FileSpreadsheet,
   Activity,
+  Wrench,
 } from 'lucide-react';
 import { reportApi } from '../api/client';
 import { IntegrityCheckResult } from '../types';
@@ -20,6 +21,7 @@ export const ReportsView: React.FC = () => {
   const { success, error } = useToast();
   const [integrityResult, setIntegrityResult] = useState<IntegrityCheckResult | null>(null);
   const [isRunningCheck, setIsRunningCheck] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
   const [exportEntity, setExportEntity] = useState<'orders' | 'purchases' | 'products' | 'movements'>('orders');
   const [isExporting, setIsExporting] = useState(false);
 
@@ -47,15 +49,39 @@ export const ReportsView: React.FC = () => {
       if (res.success) {
         setIntegrityResult(res.result);
         if (res.result.passed) {
-          success('System integrity verified! All mathematical invariants passed with 0 discrepancies.', 'Integrity Check Passed');
+          success(
+            'System integrity verified! All mathematical invariants passed with 0 discrepancies.',
+            'Integrity Check Passed'
+          );
         } else {
-          error(`Integrity check found ${res.result.summary.discrepancyCount} discrepancy(s).`, 'Discrepancy Found');
+          error(
+            `Integrity check found ${res.result.summary.discrepancyCount} discrepancy(s).`,
+            'Discrepancy Found'
+          );
         }
       }
     } catch (err: any) {
       error(err.message || 'Failed to run integrity check');
     } finally {
       setIsRunningCheck(false);
+    }
+  };
+
+  const handleAutoReconcile = async () => {
+    setIsReconciling(true);
+    try {
+      const res = await reportApi.reconcileIntegrity();
+      if (res.success) {
+        setIntegrityResult(res.result);
+        success(
+          `Successfully reconciled ${res.outcome.reconciledCount} product(s)! Missing FIFO opening batches created.`,
+          'Inventory Reconciled'
+        );
+      }
+    } catch (err: any) {
+      error(err.message || 'Failed to auto-reconcile inventory discrepancies');
+    } finally {
+      setIsReconciling(false);
     }
   };
 
@@ -115,14 +141,27 @@ export const ReportsView: React.FC = () => {
               </div>
             </div>
 
-            <button
-              onClick={handleRunIntegrityCheck}
-              disabled={isRunningCheck}
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-sm transition flex items-center gap-2 shrink-0 disabled:opacity-50"
-            >
-              <Activity className={`w-4 h-4 text-amber-400 ${isRunningCheck ? 'animate-spin' : ''}`} />
-              <span>{isRunningCheck ? 'Auditing Invariants...' : 'Run System Integrity Check'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              {integrityResult && !integrityResult.passed && (
+                <button
+                  onClick={handleAutoReconcile}
+                  disabled={isReconciling || isRunningCheck}
+                  className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-xs shadow-sm transition flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+                >
+                  <Wrench className={`w-3.5 h-3.5 ${isReconciling ? 'animate-spin' : ''}`} />
+                  <span>{isReconciling ? 'Fixing...' : 'Auto-Fix Invariants'}</span>
+                </button>
+              )}
+
+              <button
+                onClick={handleRunIntegrityCheck}
+                disabled={isRunningCheck || isReconciling}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-sm transition flex items-center gap-2 shrink-0 disabled:opacity-50"
+              >
+                <Activity className={`w-4 h-4 text-amber-400 ${isRunningCheck ? 'animate-spin' : ''}`} />
+                <span>{isRunningCheck ? 'Auditing Invariants...' : 'Run System Integrity Check'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Integrity Summary Stats */}
@@ -132,28 +171,36 @@ export const ReportsView: React.FC = () => {
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
                   <span className="text-slate-400 font-sans block">Products Audited</span>
                   <span className="text-lg font-bold text-slate-900">
-                    {integrityResult.summary.productsChecked}
+                    {(integrityResult.summary as any).totalProductsChecked ??
+                      integrityResult.summary.productsChecked ??
+                      0}
                   </span>
                 </div>
 
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
                   <span className="text-slate-400 font-sans block">FIFO Batches Audited</span>
                   <span className="text-lg font-bold text-slate-900">
-                    {integrityResult.summary.batchesChecked}
+                    {(integrityResult.summary as any).totalBatchesChecked ??
+                      integrityResult.summary.batchesChecked ??
+                      0}
                   </span>
                 </div>
 
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
                   <span className="text-slate-400 font-sans block">Movements Audited</span>
                   <span className="text-lg font-bold text-slate-900">
-                    {integrityResult.summary.movementsChecked}
+                    {(integrityResult.summary as any).totalMovementsChecked ??
+                      integrityResult.summary.movementsChecked ??
+                      0}
                   </span>
                 </div>
 
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
                   <span className="text-slate-400 font-sans block">Orders Audited</span>
                   <span className="text-lg font-bold text-slate-900">
-                    {integrityResult.summary.ordersChecked}
+                    {(integrityResult.summary as any).totalOrdersChecked ??
+                      integrityResult.summary.ordersChecked ??
+                      0}
                   </span>
                 </div>
 
@@ -182,11 +229,23 @@ export const ReportsView: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-2 text-xs text-rose-900">
-                  <div className="flex items-center gap-2 font-bold">
-                    <AlertTriangle className="w-5 h-5 text-rose-600" />
-                    <span>Inconsistencies Detected:</span>
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl space-y-3 text-xs text-rose-900">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 font-bold">
+                      <AlertTriangle className="w-5 h-5 text-rose-600" />
+                      <span>Inconsistencies Detected:</span>
+                    </div>
+
+                    <button
+                      onClick={handleAutoReconcile}
+                      disabled={isReconciling}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 shadow-sm transition active:scale-95 disabled:opacity-50"
+                    >
+                      <Wrench className={`w-3.5 h-3.5 ${isReconciling ? 'animate-spin' : ''}`} />
+                      <span>{isReconciling ? 'Reconciling...' : 'Auto-Fix All Discrepancies'}</span>
+                    </button>
                   </div>
+
                   <div className="divide-y divide-rose-200/60 font-mono text-[11px]">
                     {integrityResult.discrepancies.map((d, idx) => (
                       <div key={idx} className="py-2">
@@ -217,31 +276,33 @@ export const ReportsView: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-4">
-          <div className="w-full sm:w-64">
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="flex-1">
+            <label className="block text-[11px] font-semibold text-slate-500 mb-1">
               Select Dataset to Export
             </label>
             <select
               value={exportEntity}
-              onChange={(e: any) => setExportEntity(e.target.value)}
-              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800"
+              onChange={(e) => setExportEntity(e.target.value as any)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
             >
               <option value="orders">Sales Orders (Revenue, Profit, COGS)</option>
-              <option value="purchases">Purchases (Batches, Suppliers, POs)</option>
-              <option value="products">Product Catalog & Current Stock</option>
-              <option value="movements">Stock Movements & Audit Ledger</option>
+              <option value="purchases">Inbound Purchases (Cost, Vendor Invoices)</option>
+              <option value="products">Inventory Valuation & Unit Stock Levels</option>
+              <option value="movements">Complete Stock Audit Log & Movements</option>
             </select>
           </div>
 
-          <button
-            onClick={handleExport}
-            disabled={isExporting}
-            className="w-full sm:w-auto mt-auto px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" />
-            <span>{isExporting ? 'Generating CSV...' : `Download ${exportEntity.toUpperCase()} CSV`}</span>
-          </button>
+          <div className="sm:self-end">
+            <button
+              onClick={handleExport}
+              disabled={isExporting}
+              className="w-full sm:w-auto px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-xs shadow-sm transition flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Download className="w-4 h-4" />
+              <span>{isExporting ? 'Generating CSV...' : `Download ${exportEntity.toUpperCase()} CSV`}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

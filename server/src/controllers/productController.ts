@@ -253,9 +253,10 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
 
     await product.save();
 
-    // If initial stock was supplied with bill, record Purchase & StockMovement
+    // If initial stock was supplied with bill, record Purchase, InventoryBatch & StockMovement
     if (qty > 0) {
       const { Purchase } = await import('../models/Purchase');
+      const { InventoryBatch } = await import('../models/InventoryBatch');
       const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
       const countPurchases = await Purchase.countDocuments();
       const purchaseNumber = `PUR-${dateStr}-${String(countPurchases + 1).padStart(4, '0')}`;
@@ -281,6 +282,20 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
         attachmentUrl: billDocument,
         receivedBy: req.user?.userId || 'admin',
         isCancelled: false,
+      });
+
+      // Create authoritative FIFO inventory batch
+      await InventoryBatch.create({
+        batchNumber,
+        productId: product._id,
+        purchaseId: purchaseNumber,
+        costPrice: cp,
+        initialQuantity: qty,
+        remainingQuantity: qty,
+        storageLocation: locationShelf?.trim() || product.locationShelf,
+        receivedDate: new Date(),
+        notes: `Initial stock for ${product.name}`,
+        status: 'ACTIVE',
       });
 
       await StockMovement.create({
