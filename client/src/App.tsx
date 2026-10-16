@@ -44,10 +44,24 @@ const MainLayout: React.FC = () => {
   const [lowStockCount, setLowStockCount] = useState(0);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (!isAuthenticated) return;
+
+    loadBadgeCounts();
+
+    // Listen for data mutations (orders, products, stock adjustments)
+    const handleDataChanged = () => {
       loadBadgeCounts();
-    }
-  }, [isAuthenticated, activeTab]);
+    };
+    window.addEventListener('upvolt_data_changed', handleDataChanged);
+
+    // Periodic refresh every 60 seconds
+    const interval = setInterval(loadBadgeCounts, 60000);
+
+    return () => {
+      window.removeEventListener('upvolt_data_changed', handleDataChanged);
+      clearInterval(interval);
+    };
+  }, [isAuthenticated, isMasterAdmin]);
 
   const loadBadgeCounts = async () => {
     try {

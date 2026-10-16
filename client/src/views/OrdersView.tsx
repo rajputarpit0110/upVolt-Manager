@@ -345,7 +345,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {isLoading ? (
+              {isLoading && orders.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-12 text-center text-slate-400">
                     Loading commercial orders...

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { apiCache, CacheOptions } from './cache';
 import {
   User,
   Product,
@@ -42,9 +43,15 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: capture error message
+// Response interceptor: capture error message & invalidate cache on mutations
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const method = (response.config.method || '').toLowerCase();
+    if (['post', 'put', 'patch', 'delete'].includes(method)) {
+      apiCache.handleMutation(response.config.url || '');
+    }
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('upvolt_token');
@@ -63,14 +70,33 @@ api.interceptors.response.use(
   }
 );
 
+/**
+ * Universal cached GET helper with request deduplication and configurable TTL
+ */
+export const cachedGet = async <T>(
+  url: string,
+  params?: any,
+  options?: CacheOptions
+): Promise<T> => {
+  const key = options?.cacheKey || apiCache.generateKey(url, params);
+  return apiCache.fetchWithCache<T>(
+    key,
+    async () => {
+      const res = await api.get<T>(url, { params });
+      return res.data;
+    },
+    options
+  );
+};
+
 export const authApi = {
   login: async (credentials: { username?: string; email?: string; password: string }) => {
     const res = await api.post<{ success: boolean; token: string; user: User }>('/auth/login', credentials);
+    apiCache.clear(); // Clear all cache on new login
     return res.data;
   },
-  getMe: async () => {
-    const res = await api.get<{ success: boolean; user: User }>('/auth/me');
-    return res.data;
+  getMe: async (options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; user: User }>('/auth/me', undefined, options);
   },
   changePassword: async (data: { currentPassword: string; newPassword: string }) => {
     const res = await api.post<{ success: boolean; message: string }>('/auth/change-password', data);
@@ -79,13 +105,14 @@ export const authApi = {
 };
 
 export const productApi = {
-  getAll: async (params?: { category?: string; search?: string; lowStock?: boolean; outOfStock?: boolean }) => {
-    const res = await api.get<{ success: boolean; count: number; products: Product[] }>('/products', { params });
-    return res.data;
+  getAll: async (
+    params?: { category?: string; search?: string; lowStock?: boolean; outOfStock?: boolean },
+    options?: CacheOptions
+  ) => {
+    return cachedGet<{ success: boolean; count: number; products: Product[] }>('/products', params, options);
   },
-  getById: async (id: string) => {
-    const res = await api.get<{ success: boolean; product: Product }>('/products/' + id);
-    return res.data;
+  getById: async (id: string, options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; product: Product }>('/products/' + id, undefined, options);
   },
   create: async (data: Partial<Product> & Record<string, any>) => {
     const res = await api.post<{ success: boolean; product: Product }>('/products', data);
@@ -95,35 +122,42 @@ export const productApi = {
     const res = await api.put<{ success: boolean; product: Product }>('/products/' + id, data);
     return res.data;
   },
-  getPriceHistory: async (id: string) => {
-    const res = await api.get<{ success: boolean; count: number; history: ProductPriceHistory[] }>(
-      `/products/${id}/price-history`
+  getPriceHistory: async (id: string, options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; count: number; history: ProductPriceHistory[] }>(
+      `/products/${id}/price-history`,
+      undefined,
+      options
     );
-    return res.data;
   },
-  getBatches: async (id: string) => {
-    const res = await api.get<{ success: boolean; count: number; batches: InventoryBatch[] }>(
-      `/products/${id}/batches`
+  getBatches: async (id: string, options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; count: number; batches: InventoryBatch[] }>(
+      `/products/${id}/batches`,
+      undefined,
+      options
     );
-    return res.data;
   },
-  getLedger: async (id: string) => {
-    const res = await api.get<{ success: boolean; count: number; ledger: any[] }>(`/products/${id}/ledger`);
-    return res.data;
+  getLedger: async (id: string, options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; count: number; ledger: any[] }>(
+      `/products/${id}/ledger`,
+      undefined,
+      options
+    );
   },
 };
 
 export const purchaseApi = {
-  getAll: async (params?: { search?: string; startDate?: string; endDate?: string; page?: number; limit?: number }) => {
-    const res = await api.get<{ success: boolean; count: number; total: number; purchases: Purchase[] }>(
+  getAll: async (
+    params?: { search?: string; startDate?: string; endDate?: string; page?: number; limit?: number },
+    options?: CacheOptions
+  ) => {
+    return cachedGet<{ success: boolean; count: number; total: number; purchases: Purchase[] }>(
       '/purchases',
-      { params }
+      params,
+      options
     );
-    return res.data;
   },
-  getById: async (id: string) => {
-    const res = await api.get<{ success: boolean; purchase: Purchase }>('/purchases/' + id);
-    return res.data;
+  getById: async (id: string, options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; purchase: Purchase }>('/purchases/' + id, undefined, options);
   },
   create: async (data: {
     supplier?: any;
@@ -146,25 +180,30 @@ export const purchaseApi = {
 };
 
 export const orderApi = {
-  getAll: async (params?: {
-    status?: string;
-    paymentStatus?: string;
-    search?: string;
-    startDate?: string;
-    endDate?: string;
-    page?: number;
-    limit?: number;
-  }) => {
-    const res = await api.get<{ success: boolean; count: number; total: number; orders: Order[] }>('/orders', {
+  getAll: async (
+    params?: {
+      status?: string;
+      paymentStatus?: string;
+      search?: string;
+      startDate?: string;
+      endDate?: string;
+      page?: number;
+      limit?: number;
+    },
+    options?: CacheOptions
+  ) => {
+    return cachedGet<{ success: boolean; count: number; total: number; orders: Order[] }>(
+      '/orders',
       params,
-    });
-    return res.data;
-  },
-  getById: async (id: string) => {
-    const res = await api.get<{ success: boolean; order: Order; versions: OrderVersion[]; returns: OrderReturn[] }>(
-      '/orders/' + id
+      options
     );
-    return res.data;
+  },
+  getById: async (id: string, options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; order: Order; versions: OrderVersion[]; returns: OrderReturn[] }>(
+      '/orders/' + id,
+      undefined,
+      options
+    );
   },
   create: async (data: {
     customer?: any;
@@ -231,9 +270,8 @@ export const orderApi = {
     );
     return res.data;
   },
-  getTrash: async () => {
-    const res = await api.get<{ success: boolean; count: number; orders: Order[] }>('/orders/trash/all');
-    return res.data;
+  getTrash: async (options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; count: number; orders: Order[] }>('/orders/trash/all', undefined, options);
   },
   softDelete: async (id: string, reason?: string) => {
     const res = await api.delete<{ success: boolean; message: string; order: Order }>(`/orders/${id}`, {
@@ -251,28 +289,32 @@ export const orderApi = {
     });
     return res.data;
   },
-  getVersions: async (id: string) => {
-    const res = await api.get<{ success: boolean; count: number; versions: OrderVersion[] }>(
-      `/orders/${id}/versions`
+  getVersions: async (id: string, options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; count: number; versions: OrderVersion[] }>(
+      `/orders/${id}/versions`,
+      undefined,
+      options
     );
-    return res.data;
   },
 };
 
 export const inventoryApi = {
-  getMovements: async (params?: {
-    productId?: string;
-    movementType?: string;
-    startDate?: string;
-    endDate?: string;
-    page?: number;
-    limit?: number;
-  }) => {
-    const res = await api.get<{ success: boolean; count: number; total: number; movements: StockMovement[] }>(
+  getMovements: async (
+    params?: {
+      productId?: string;
+      movementType?: string;
+      startDate?: string;
+      endDate?: string;
+      page?: number;
+      limit?: number;
+    },
+    options?: CacheOptions
+  ) => {
+    return cachedGet<{ success: boolean; count: number; total: number; movements: StockMovement[] }>(
       '/inventory/movements',
-      { params }
+      params,
+      options
     );
-    return res.data;
   },
   adjustStock: async (data: {
     productId: string;
@@ -293,7 +335,8 @@ export const inventoryApi = {
 
 export const reportApi = {
   getDashboard: async (
-    params?: { timeRange?: string; range?: string; startDate?: string; endDate?: string } | string
+    params?: { timeRange?: string; range?: string; startDate?: string; endDate?: string } | string,
+    options?: CacheOptions
   ) => {
     const queryParams =
       typeof params === 'string'
@@ -304,20 +347,13 @@ export const reportApi = {
             startDate: params?.startDate,
             endDate: params?.endDate,
           };
-    const res = await api.get<{ success: boolean; data: DashboardSummary }>('/reports/dashboard', {
-      params: queryParams,
-    });
-    return res.data;
+    return cachedGet<{ success: boolean; data: DashboardSummary }>('/reports/dashboard', queryParams, options);
   },
-  getIntegrityCheck: async () => {
-    const res = await api.get<{ success: boolean; result: IntegrityCheckResult }>('/reports/integrity-check');
-    return res.data;
+  getIntegrityCheck: async (options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; result: IntegrityCheckResult }>('/reports/integrity-check', undefined, options);
   },
-  getDailyActivity: async (date?: string) => {
-    const res = await api.get<{ success: boolean; report: DailyActivityReport }>('/reports/daily-activity', {
-      params: { date },
-    });
-    return res.data;
+  getDailyActivity: async (date?: string, options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; report: DailyActivityReport }>('/reports/daily-activity', { date }, options);
   },
   exportCsv: async (entity: 'orders' | 'purchases' | 'products' | 'movements', params?: any) => {
     const res = await api.get(`/reports/export/${entity}`, {
@@ -329,11 +365,8 @@ export const reportApi = {
 };
 
 export const customerApi = {
-  getAll: async (params?: { search?: string; category?: string }) => {
-    const res = await api.get<{ success: boolean; count: number; customers: Customer[] }>('/customers', {
-      params,
-    });
-    return res.data;
+  getAll: async (params?: { search?: string; category?: string }, options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; count: number; customers: Customer[] }>('/customers', params, options);
   },
   create: async (data: Partial<Customer>) => {
     const res = await api.post<{ success: boolean; customer: Customer }>('/customers', data);
@@ -346,11 +379,8 @@ export const customerApi = {
 };
 
 export const supplierApi = {
-  getAll: async (params?: { search?: string }) => {
-    const res = await api.get<{ success: boolean; count: number; suppliers: Supplier[] }>('/suppliers', {
-      params,
-    });
-    return res.data;
+  getAll: async (params?: { search?: string }, options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; count: number; suppliers: Supplier[] }>('/suppliers', params, options);
   },
   create: async (data: Partial<Supplier>) => {
     const res = await api.post<{ success: boolean; supplier: Supplier }>('/suppliers', data);
@@ -363,9 +393,8 @@ export const supplierApi = {
 };
 
 export const userApi = {
-  getAll: async () => {
-    const res = await api.get<{ success: boolean; count: number; users: User[] }>('/users');
-    return res.data;
+  getAll: async (options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; count: number; users: User[] }>('/users', undefined, options);
   },
   create: async (data: {
     userId: string;
@@ -415,63 +444,66 @@ export const collegeApi = {
     );
     return res.data;
   },
-  getDispatches: async (params?: { college?: string; startDate?: string; endDate?: string }) => {
-    const res = await api.get<{ success: boolean; dispatches: CollegeDispatch[] }>(
+  getDispatches: async (
+    params?: { college?: string; startDate?: string; endDate?: string },
+    options?: CacheOptions
+  ) => {
+    return cachedGet<{ success: boolean; dispatches: CollegeDispatch[] }>(
       '/colleges/dispatches',
-      { params }
+      params,
+      options
     );
-    return res.data;
   },
-  getInventory: async (college?: string) => {
-    const res = await api.get<{
+  getInventory: async (college?: string, options?: CacheOptions) => {
+    return cachedGet<{
       success: boolean;
       college: string;
       items: CollegeInventory[];
       totalProducts: number;
       totalUnits: number;
-    }>('/colleges/inventory', { params: { college } });
-    return res.data;
+    }>('/colleges/inventory', { college }, options);
   },
-  getColleges: async () => {
-    const res = await api.get<{ success: boolean; colleges: string[] }>('/colleges/list');
-    return res.data;
+  getColleges: async (options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; colleges: string[] }>('/colleges/list', undefined, options);
   },
-  getTeam: async (college?: string) => {
-    const res = await api.get<{
+  getTeam: async (college?: string, options?: CacheOptions) => {
+    return cachedGet<{
       success: boolean;
       executives: User[];
       deliveryAgents: User[];
       all: User[];
-    }>('/colleges/team', { params: { college } });
-    return res.data;
+    }>('/colleges/team', { college }, options);
   },
 };
 
 export const auditApi = {
-  getAll: async (params?: {
-    action?: string;
-    entityType?: string;
-    userId?: string;
-    startDate?: string;
-    endDate?: string;
-    page?: number;
-    limit?: number;
-  }) => {
-    const res = await api.get<{ success: boolean; count: number; total: number; logs: AuditLog[] }>(
+  getAll: async (
+    params?: {
+      action?: string;
+      entityType?: string;
+      userId?: string;
+      startDate?: string;
+      endDate?: string;
+      page?: number;
+      limit?: number;
+    },
+    options?: CacheOptions
+  ) => {
+    return cachedGet<{ success: boolean; count: number; total: number; logs: AuditLog[] }>(
       '/audit-logs',
-      { params }
+      params,
+      options
     );
-    return res.data;
   },
 };
 
 export const notificationApi = {
-  getAll: async (unreadOnly: boolean = false) => {
-    const res = await api.get<{ success: boolean; count: number; notifications: Notification[] }>(
+  getAll: async (unreadOnly: boolean = false, options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; count: number; notifications: Notification[] }>(
       '/notifications',
-      { params: { unreadOnly } }
+      { unreadOnly },
+      options
     );
-    return res.data;
   },
   markAsRead: async (id: string) => {
     const res = await api.patch<{ success: boolean }>(`/notifications/${id}/read`);
@@ -484,8 +516,8 @@ export const notificationApi = {
 };
 
 export const searchApi = {
-  globalSearch: async (q: string) => {
-    const res = await api.get<{
+  globalSearch: async (q: string, options?: CacheOptions) => {
+    return cachedGet<{
       success: boolean;
       query: string;
       results: {
@@ -494,15 +526,13 @@ export const searchApi = {
         customers: Customer[];
         suppliers: Supplier[];
       };
-    }>('/search', { params: { q } });
-    return res.data;
+    }>('/search', { q }, options);
   },
 };
 
 export const categoryApi = {
-  getAll: async () => {
-    const res = await api.get<{ success: boolean; count: number; categories: Category[] }>('/categories');
-    return res.data;
+  getAll: async (options?: CacheOptions) => {
+    return cachedGet<{ success: boolean; count: number; categories: Category[] }>('/categories', undefined, options);
   },
   create: async (data: { name: string; description?: string }) => {
     const res = await api.post<{ success: boolean; message: string; category: Category }>('/categories', data);
@@ -518,4 +548,5 @@ export const categoryApi = {
   },
 };
 
+export { apiCache };
 export default api;

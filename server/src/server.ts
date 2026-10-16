@@ -61,10 +61,15 @@ const authLimiter = rateLimit({
 
 app.use('/api/auth/login', authLimiter);
 
+import { autoInvalidateCacheMiddleware } from './middlewares/cache';
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'UpVolt API Server', timestamp: new Date() });
 });
+
+// Cache auto-invalidation middleware on state-mutating HTTP methods
+app.use(autoInvalidateCacheMiddleware);
 
 // API Routes
 app.use('/api/auth', authRoutes);

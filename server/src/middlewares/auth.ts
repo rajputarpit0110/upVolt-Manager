@@ -20,6 +20,24 @@ declare global {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'upvolt_super_secure_jwt_secret_key_2026';
 
+// In-memory cache for authenticated active users (eliminates redundant DB query on every request)
+interface CachedUser {
+  user: AuthUserPayload;
+  isActive: boolean;
+  cachedAt: number;
+}
+
+const userAuthCache = new Map<string, CachedUser>();
+const USER_CACHE_TTL = 60 * 1000; // 60 seconds
+
+export const invalidateUserAuthCache = (userId?: string): void => {
+  if (userId) {
+    userAuthCache.delete(userId);
+  } else {
+    userAuthCache.clear();
+  }
+};
+
 export const authenticateToken = async (
   req: Request,
   res: Response,
@@ -42,20 +60,36 @@ export const authenticateToken = async (
 
     const decoded = jwt.verify(token, JWT_SECRET) as AuthUserPayload;
 
+    // Fast-path: Check in-memory user cache first to avoid repetitive DB query
+    const cached = userAuthCache.get(decoded.userId);
+    if (cached && Date.now() - cached.cachedAt < USER_CACHE_TTL) {
+      if (!cached.isActive) {
+        res.status(401).json({ success: false, message: 'User account is deactivated or no longer exists.' });
+        return;
+      }
+      req.user = cached.user;
+      next();
+      return;
+    }
+
     // Verify user is still active in database
     const user = await User.findOne({ userId: decoded.userId });
     if (!user || !user.isActive) {
+      userAuthCache.set(decoded.userId, { user: {} as any, isActive: false, cachedAt: Date.now() });
       res.status(401).json({ success: false, message: 'User account is deactivated or no longer exists.' });
       return;
     }
 
-    req.user = {
+    const userPayload: AuthUserPayload = {
       userId: user.userId,
       name: user.name,
       role: user.role,
       college: user.college,
       email: user.email,
     };
+
+    userAuthCache.set(decoded.userId, { user: userPayload, isActive: true, cachedAt: Date.now() });
+    req.user = userPayload;
 
     next();
   } catch (error) {
