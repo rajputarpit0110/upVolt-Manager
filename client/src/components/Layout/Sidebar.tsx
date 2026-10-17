@@ -74,7 +74,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'add_inventory', label: 'Add Inventory', icon: PackagePlus, section: 'Stock & Distribution' },
     { id: 'college_dispatch', label: 'College Dispatch', icon: Truck, section: 'Stock & Distribution' },
     { id: 'orders', label: 'Delivered Orders', icon: ShoppingCart, section: 'Sales' },
-    { id: 'products', label: 'Products', icon: Boxes, section: 'Catalog' },
     { id: 'team', label: 'Team / Users', icon: UserCheck, section: 'Administration' },
     { id: 'reports', label: 'Reports', icon: BarChart3, section: 'Analytics' },
   ];
