@@ -143,6 +143,10 @@ export const productApi = {
       options
     );
   },
+  delete: async (id: string) => {
+    const res = await api.delete<{ success: boolean; message: string }>('/products/' + id);
+    return res.data;
+  },
 };
 
 export const purchaseApi = {
@@ -175,6 +179,10 @@ export const purchaseApi = {
       '/purchases',
       data
     );
+    return res.data;
+  },
+  delete: async (id: string) => {
+    const res = await api.delete<{ success: boolean; message: string }>('/purchases/' + id);
     return res.data;
   },
 };

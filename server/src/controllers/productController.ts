@@ -532,3 +532,50 @@ export const getProductLedger = async (req: Request, res: Response): Promise<voi
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const deleteProduct = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const product = await Product.findById(id);
+
+    if (!product) {
+      res.status(404).json({ success: false, message: 'Product not found.' });
+      return;
+    }
+
+    if (req.user?.role !== 'MASTER_ADMIN') {
+      res.status(403).json({ success: false, message: 'Access Denied: Only Master Admin can delete catalog products.' });
+      return;
+    }
+
+    // Delete associated batches and notifications
+    await InventoryBatch.deleteMany({ productId: product._id });
+    const { Notification } = await import('../models/Notification');
+    await Notification.deleteMany({ referenceId: product._id.toString() });
+
+    await Product.findByIdAndDelete(id);
+
+    await createAuditLog({
+      userId: req.user!.userId,
+      userName: req.user!.name,
+      role: req.user!.role,
+      action: 'DELETE_PRODUCT',
+      entityType: 'PRODUCT',
+      entityId: product._id.toString(),
+      previousState: {
+        name: product.name,
+        sku: product.sku,
+        category: product.category,
+        currentStock: product.currentStock,
+      },
+      ip: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: `Product "${product.name}" (${product.sku}) deleted successfully.`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

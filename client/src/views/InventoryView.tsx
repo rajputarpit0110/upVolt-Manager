@@ -9,10 +9,13 @@ import {
   Edit2,
   Boxes,
   Tag,
+  Trash2,
 } from 'lucide-react';
 import { Product, Category } from '../types';
 import { productApi, categoryApi } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../components/Common/Toast';
+import { Modal } from '../components/Common/Modal';
 import { ProductDetailModal } from '../components/Products/ProductDetailModal';
 import { AdjustStockModal } from '../components/Products/AdjustStockModal';
 import { AddProductModal } from '../components/Products/AddProductModal';
@@ -28,6 +31,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   onClearSelectedProduct,
 }) => {
   const { isMasterAdmin } = useAuth();
+  const { success, error } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [categoriesList, setCategoriesList] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -41,6 +45,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [productDeleteConfirmText, setProductDeleteConfirmText] = useState('');
+  const [isDeletingProduct, setIsDeletingProduct] = useState(false);
 
   useEffect(() => {
     loadCategories();
@@ -84,6 +91,29 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       console.error(err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDeleteProduct = async () => {
+    if (!productToDelete) return;
+    if (productDeleteConfirmText.trim().toUpperCase() !== 'DELETE') {
+      error('Please type DELETE to confirm deletion');
+      return;
+    }
+
+    setIsDeletingProduct(true);
+    try {
+      const res = await productApi.delete(productToDelete._id);
+      if (res.success) {
+        success(res.message || 'Product deleted successfully');
+        setProductToDelete(null);
+        setProductDeleteConfirmText('');
+        await loadProducts();
+      }
+    } catch (err: any) {
+      error(err.message || 'Failed to delete product');
+    } finally {
+      setIsDeletingProduct(false);
     }
   };
 
@@ -343,6 +373,19 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
+
+                          {isMasterAdmin && (
+                            <button
+                              onClick={() => {
+                                setProductToDelete(p);
+                                setProductDeleteConfirmText('');
+                              }}
+                              title="Delete Product from Catalog (Master Admin only)"
+                              className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -387,6 +430,94 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           loadProducts();
         }}
       />
+
+      {/* Product Delete Confirmation Modal */}
+      {productToDelete && (
+        <Modal
+          isOpen={true}
+          onClose={() => {
+            if (!isDeletingProduct) {
+              setProductToDelete(null);
+              setProductDeleteConfirmText('');
+            }
+          }}
+          title={`Delete Product: ${productToDelete.name}`}
+          subtitle={`SKU: ${productToDelete.sku} | Permanent catalog deletion`}
+          maxWidth="md"
+        >
+          <div className="space-y-4">
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-rose-800">Critical Deletion Warning</p>
+                <p className="mt-1 text-rose-700 leading-relaxed">
+                  Deleting this product will permanently remove{' '}
+                  <span className="font-bold">{productToDelete.name}</span> (SKU: {productToDelete.sku})
+                  from the catalog, along with its active inventory batches and historical links.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Current Stock:</span>
+                <span className="font-mono font-bold text-slate-800">
+                  {productToDelete.currentStock} {productToDelete.unit}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Category:</span>
+                <span className="font-medium text-slate-800">{productToDelete.category}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Selling Price:</span>
+                <span className="font-mono font-bold text-slate-800">
+                  ₹{productToDelete.sellingPrice.toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Type <span className="font-mono font-bold text-rose-600">DELETE</span> to confirm:
+              </label>
+              <input
+                type="text"
+                value={productDeleteConfirmText}
+                onChange={(e) => setProductDeleteConfirmText(e.target.value)}
+                placeholder="Type DELETE here..."
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={isDeletingProduct}
+                onClick={() => {
+                  setProductToDelete(null);
+                  setProductDeleteConfirmText('');
+                }}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  productDeleteConfirmText.trim().toUpperCase() !== 'DELETE' || isDeletingProduct
+                }
+                onClick={handleDeleteProduct}
+                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 disabled:cursor-not-allowed text-white text-xs font-bold transition flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeletingProduct ? 'Deleting Product...' : 'Permanently Delete Product'}</span>
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

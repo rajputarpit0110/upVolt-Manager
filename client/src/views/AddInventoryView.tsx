@@ -40,7 +40,7 @@ interface InventoryItemRow {
 }
 
 export const AddInventoryView: React.FC = () => {
-  const { user } = useAuth();
+  const { user, isMasterAdmin } = useAuth();
   const { success, error } = useToast();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -79,9 +79,12 @@ export const AddInventoryView: React.FC = () => {
   const [newProdBillFileName, setNewProdBillFileName] = useState('');
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
 
-  // Modal State: View Bill / Invoice
+  // Modal State: View Bill / Invoice & Delete Purchase
   const [viewingBillUrl, setViewingBillUrl] = useState<string | null>(null);
   const [inspectingPurchase, setInspectingPurchase] = useState<Purchase | null>(null);
+  const [purchaseToDelete, setPurchaseToDelete] = useState<Purchase | null>(null);
+  const [deletePurchaseConfirmText, setDeletePurchaseConfirmText] = useState('');
+  const [isDeletingPurchase, setIsDeletingPurchase] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -111,6 +114,29 @@ export const AddInventoryView: React.FC = () => {
       error(err.message || 'Failed to load inventory data');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDeletePurchase = async () => {
+    if (!purchaseToDelete) return;
+    if (deletePurchaseConfirmText.trim().toUpperCase() !== 'DELETE') {
+      error('Please type DELETE to confirm deletion');
+      return;
+    }
+
+    setIsDeletingPurchase(true);
+    try {
+      const res = await purchaseApi.delete(purchaseToDelete._id);
+      if (res.success) {
+        success(res.message || 'Purchase log deleted and inventory stock reversed');
+        setPurchaseToDelete(null);
+        setDeletePurchaseConfirmText('');
+        await loadData();
+      }
+    } catch (err: any) {
+      error(err.message || 'Failed to delete purchase record');
+    } finally {
+      setIsDeletingPurchase(false);
     }
   };
 
@@ -858,6 +884,21 @@ export const AddInventoryView: React.FC = () => {
                           <Eye className="w-3 h-3 text-slate-500" />
                           <span>Details</span>
                         </button>
+
+                        {isMasterAdmin && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPurchaseToDelete(pur);
+                              setDeletePurchaseConfirmText('');
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-rose-50 text-rose-700 hover:bg-rose-100 font-medium text-[11px] border border-rose-200 transition"
+                            title="Delete purchase log and reverse added stock"
+                          >
+                            <Trash2 className="w-3 h-3 text-rose-600" />
+                            <span>Delete</span>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1119,6 +1160,94 @@ export const AddInventoryView: React.FC = () => {
                 </button>
               </div>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: CONFIRM DELETE PURCHASE RECORD */}
+      {/* ========================================================= */}
+      {purchaseToDelete && (
+        <Modal
+          isOpen={true}
+          onClose={() => {
+            if (!isDeletingPurchase) {
+              setPurchaseToDelete(null);
+              setDeletePurchaseConfirmText('');
+            }
+          }}
+          title={`Delete Purchase: ${purchaseToDelete.purchaseNumber}`}
+          subtitle="Permanently remove purchase record and reverse added stock"
+          maxWidth="md"
+        >
+          <div className="space-y-4">
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-start gap-2.5">
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-rose-800">Critical Stock Reversal Warning</p>
+                <p className="mt-1 text-rose-700 leading-relaxed">
+                  Deleting this purchase record will <strong>permanently delete</strong> the purchase entry{' '}
+                  <span className="font-mono font-bold">{purchaseToDelete.purchaseNumber}</span> and{' '}
+                  <strong>automatically deduct</strong> the following quantities from UpVolt Central Stock & FIFO batches:
+                </p>
+              </div>
+            </div>
+
+            <div className="border border-slate-200 rounded-xl max-h-48 overflow-y-auto p-2 bg-slate-50 space-y-1">
+              <div className="text-[11px] font-bold text-slate-500 uppercase px-2 py-1">
+                Quantities To Be Deducted:
+              </div>
+              {purchaseToDelete.items.map((it, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center justify-between px-2 py-1 bg-white rounded border border-slate-200 text-xs"
+                >
+                  <span className="font-medium text-slate-800 truncate mr-2">{it.productName}</span>
+                  <span className="font-mono font-bold text-rose-600 shrink-0">
+                    -{it.quantity} units
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Type <span className="font-mono font-bold text-rose-600">DELETE</span> to confirm:
+              </label>
+              <input
+                type="text"
+                value={deletePurchaseConfirmText}
+                onChange={(e) => setDeletePurchaseConfirmText(e.target.value)}
+                placeholder="Type DELETE here..."
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={isDeletingPurchase}
+                onClick={() => {
+                  setPurchaseToDelete(null);
+                  setDeletePurchaseConfirmText('');
+                }}
+                className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  deletePurchaseConfirmText.trim().toUpperCase() !== 'DELETE' || isDeletingPurchase
+                }
+                onClick={handleDeletePurchase}
+                className="px-4 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 disabled:cursor-not-allowed text-white text-xs font-bold transition flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeletingPurchase ? 'Deleting & Reverting...' : 'Delete & Deduct Stock'}</span>
+              </button>
+            </div>
           </div>
         </Modal>
       )}
