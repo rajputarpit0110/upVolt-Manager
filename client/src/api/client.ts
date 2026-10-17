@@ -434,6 +434,10 @@ export const userApi = {
     );
     return res.data;
   },
+  delete: async (id: string) => {
+    const res = await api.delete<{ success: boolean; message: string }>('/users/' + id);
+    return res.data;
+  },
 };
 
 export const collegeApi = {

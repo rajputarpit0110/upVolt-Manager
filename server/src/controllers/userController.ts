@@ -189,7 +189,7 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
       }
     }
 
-    const { isActive, name, email, phone, college } = req.body;
+    const { isActive, name, email, phone, college, role, department, notes } = req.body;
     if (typeof isActive === 'boolean') {
       if (user.userId === req.user?.userId && !isActive) {
         res.status(400).json({ success: false, message: 'You cannot deactivate your own account.' });
@@ -200,7 +200,47 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
     if (name) user.name = name.trim();
     if (email !== undefined) user.email = email.trim();
     if (phone !== undefined) user.phone = phone.trim();
-    if (college !== undefined) user.college = college.trim();
+    if (department !== undefined) user.department = department.trim();
+    if (notes !== undefined) user.notes = notes.trim();
+
+    // Role changes are restricted strictly to MASTER_ADMIN
+    if (role && role !== user.role) {
+      if (req.user?.role !== 'MASTER_ADMIN') {
+        res.status(403).json({ success: false, message: 'Only Master Admins can modify user roles.' });
+        return;
+      }
+
+      // Safety check: Prevent changing self role away from MASTER_ADMIN if they are the only Master Admin
+      if (user.userId === req.user?.userId && role !== 'MASTER_ADMIN') {
+        const masterAdminCount = await User.countDocuments({ role: 'MASTER_ADMIN', isActive: true });
+        if (masterAdminCount <= 1) {
+          res.status(400).json({
+            success: false,
+            message: 'Cannot demote the only active Master Admin account.',
+          });
+          return;
+        }
+      }
+
+      user.role = role;
+    }
+
+    // College assignment logic
+    if (college !== undefined) {
+      user.college = college.trim() ? college.trim() : undefined;
+    }
+
+    // Validate college requirement for College Member and Campus Executive
+    if (
+      (user.role === 'COLLEGE_MEMBER' || user.role === 'CAMPUS_EXECUTIVE') &&
+      (!user.college || !user.college.trim())
+    ) {
+      res.status(400).json({
+        success: false,
+        message: 'A college campus is required for College Executives and Campus Distributive Agents.',
+      });
+      return;
+    }
 
     await user.save();
 
@@ -211,7 +251,16 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
       action: 'UPDATE_USER',
       entityType: 'USER',
       entityId: user._id.toString(),
-      newState: { userId: user.userId, isActive: user.isActive, name: user.name, college: user.college },
+      newState: {
+        userId: user.userId,
+        isActive: user.isActive,
+        name: user.name,
+        role: user.role,
+        college: user.college,
+        email: user.email,
+        phone: user.phone,
+        department: user.department,
+      },
       ip: req.ip,
     });
 
@@ -219,6 +268,65 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
       success: true,
       message: `User ${user.userId} updated successfully.`,
       user,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const deleteUser = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
+
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found.' });
+      return;
+    }
+
+    // Safeguard 1: Master Admin cannot delete their own account
+    if (user.userId === req.user?.userId) {
+      res.status(400).json({
+        success: false,
+        message: 'You cannot delete your own account.',
+      });
+      return;
+    }
+
+    // Safeguard 2: Ensure at least one active Master Admin remains
+    if (user.role === 'MASTER_ADMIN') {
+      const masterAdminCount = await User.countDocuments({ role: 'MASTER_ADMIN' });
+      if (masterAdminCount <= 1) {
+        res.status(400).json({
+          success: false,
+          message: 'Cannot delete the only Master Admin account in the system.',
+        });
+        return;
+      }
+    }
+
+    await User.findByIdAndDelete(id);
+
+    await createAuditLog({
+      userId: req.user!.userId,
+      userName: req.user!.name,
+      role: req.user!.role,
+      action: 'DELETE_USER',
+      entityType: 'USER',
+      entityId: user._id.toString(),
+      previousState: {
+        userId: user.userId,
+        name: user.name,
+        role: user.role,
+        college: user.college,
+        email: user.email,
+      },
+      ip: req.ip,
+    });
+
+    res.json({
+      success: true,
+      message: `User ${user.name} (@${user.userId}) deleted successfully.`,
     });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
