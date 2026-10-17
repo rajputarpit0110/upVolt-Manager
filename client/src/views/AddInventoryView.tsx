@@ -90,8 +90,8 @@ export const AddInventoryView: React.FC = () => {
     loadData();
   }, []);
 
-  const loadData = async () => {
-    setIsLoading(true);
+  const loadData = async (showLoading: boolean = true) => {
+    if (showLoading) setIsLoading(true);
     try {
       const [prodRes, purRes, catRes] = await Promise.all([
         productApi.getAll(),
@@ -113,7 +113,7 @@ export const AddInventoryView: React.FC = () => {
     } catch (err: any) {
       error(err.message || 'Failed to load inventory data');
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   };
 
@@ -124,14 +124,33 @@ export const AddInventoryView: React.FC = () => {
       return;
     }
 
+    const deletedPurId = purchaseToDelete._id;
+    const deletedItems = purchaseToDelete.items;
+
     setIsDeletingPurchase(true);
     try {
-      const res = await purchaseApi.delete(purchaseToDelete._id);
+      const res = await purchaseApi.delete(deletedPurId);
       if (res.success) {
-        success(res.message || 'Purchase log deleted and inventory stock reversed');
+        // Immediate optimistic UI update (0ms delay, no re-render lag of the whole table)
+        setPurchases((prev) => prev.filter((p) => p._id !== deletedPurId));
+        setProducts((prev) =>
+          prev.map((prod) => {
+            const match = deletedItems.find((it) => it.productId === prod._id);
+            if (match) {
+              return {
+                ...prod,
+                currentStock: Math.max(0, prod.currentStock - match.quantity),
+              };
+            }
+            return prod;
+          })
+        );
         setPurchaseToDelete(null);
         setDeletePurchaseConfirmText('');
-        await loadData();
+        success(res.message || 'Purchase log deleted and inventory stock reversed');
+
+        // Silent background sync without table unmounting / spinner delay
+        loadData(false);
       }
     } catch (err: any) {
       error(err.message || 'Failed to delete purchase record');

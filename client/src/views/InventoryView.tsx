@@ -75,8 +75,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     }
   }, [selectedProductFromParent]);
 
-  const loadProducts = async () => {
-    setIsLoading(true);
+  const loadProducts = async (showLoading: boolean = true) => {
+    if (showLoading) setIsLoading(true);
     try {
       const params: any = {};
       if (categoryFilter !== 'ALL') params.category = categoryFilter;
@@ -90,7 +90,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     } catch (err) {
       console.error(err);
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   };
 
@@ -101,14 +101,19 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       return;
     }
 
+    const deletedId = productToDelete._id;
     setIsDeletingProduct(true);
     try {
-      const res = await productApi.delete(productToDelete._id);
+      const res = await productApi.delete(deletedId);
       if (res.success) {
-        success(res.message || 'Product deleted successfully');
+        // Optimistic UI update: instantly remove deleted product from table
+        setProducts((prev) => prev.filter((p) => p._id !== deletedId));
         setProductToDelete(null);
         setProductDeleteConfirmText('');
-        await loadProducts();
+        success(res.message || 'Product deleted successfully');
+
+        // Silent background sync without table unmounting/spinner
+        loadProducts(false);
       }
     } catch (err: any) {
       error(err.message || 'Failed to delete product');
