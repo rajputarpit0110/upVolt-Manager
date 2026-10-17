@@ -17,6 +17,7 @@ import { OrderStatusBadge, PaymentStatusBadge, Badge } from '../components/Commo
 import { Modal } from '../components/Common/Modal';
 import { useToast } from '../components/Common/Toast';
 import { OrderDetailModal } from '../components/Orders/OrderDetailModal';
+import { SearchableProductSelect } from '../components/Common/SearchableProductSelect';
 
 interface OrdersViewProps {
   isCreateOrderModalOpenFromParent?: boolean;
@@ -563,18 +564,12 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                           className={isOverselling ? 'bg-rose-50/70' : 'hover:bg-slate-50/50'}
                         >
                           <td className="py-2 px-3 font-sans">
-                            <select
+                            <SearchableProductSelect
+                              products={products}
                               value={item.productId}
-                              onChange={(e) => updateItemRow(idx, 'productId', e.target.value)}
-                              className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800"
-                            >
-                              <option value="">-- Select Product --</option>
-                              {products.map((p) => (
-                                <option key={p._id} value={p._id}>
-                                  {p.name} ({p.sku}) — Available: {p.currentStock - p.reservedStock}
-                                </option>
-                              ))}
-                            </select>
+                              onChange={(newId) => updateItemRow(idx, 'productId', newId)}
+                              placeholder="-- Select Product --"
+                            />
                             {isOverselling && (
                               <div className="text-[11px] text-rose-600 font-medium mt-0.5">
                                 ⚠️ Only {available} available in stock!

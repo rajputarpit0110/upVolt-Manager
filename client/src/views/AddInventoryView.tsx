@@ -19,6 +19,7 @@ import { productApi, purchaseApi, categoryApi } from '../api/client';
 import { Modal } from '../components/Common/Modal';
 import { useToast } from '../components/Common/Toast';
 import { useAuth } from '../context/AuthContext';
+import { SearchableProductSelect } from '../components/Common/SearchableProductSelect';
 
 const DEFAULT_CATEGORIES = [
   'Development Boards',
@@ -557,31 +558,21 @@ export const AddInventoryView: React.FC = () => {
                           </div>
                         ) : (
                           <div>
-                            <select
-                              required
+                            <SearchableProductSelect
+                              products={products}
                               value={row.productId}
-                              onChange={(e) => {
-                                if (e.target.value === '__CUSTOM__') {
-                                  setCustomRowIndex(idx);
-                                  setCustomProdName('');
-                                  setCustomProdCategory('Development Boards');
-                                  setCustomProdSellingPrice('');
-                                } else {
-                                  updateItemRow(idx, 'productId', e.target.value);
-                                }
+                              allowCustom={true}
+                              onSelectCustom={() => {
+                                setCustomRowIndex(idx);
+                                setCustomProdName('');
+                                setCustomProdCategory('Development Boards');
+                                setCustomProdSellingPrice('');
                               }}
-                              className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                            >
-                              <option value="">-- Select Component / Product --</option>
-                              <option value="__CUSTOM__" className="font-bold text-amber-700 bg-amber-50 py-1">
-                                ✨ + Custom Product (Add New)
-                              </option>
-                              {products.map((p) => (
-                                <option key={p._id} value={p._id}>
-                                  {p.name} ({p.sku}) — Available: {p.currentStock}
-                                </option>
-                              ))}
-                            </select>
+                              onChange={(productId) => {
+                                updateItemRow(idx, 'productId', productId);
+                              }}
+                              placeholder="-- Select Component / Product --"
+                            />
                             {selectedProd && (
                               <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-2">
                                 <span>Current Central Stock: {selectedProd.currentStock}</span>

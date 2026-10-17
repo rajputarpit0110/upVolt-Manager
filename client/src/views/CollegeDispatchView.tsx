@@ -21,6 +21,7 @@ import { productApi, collegeApi } from '../api/client';
 import { Modal } from '../components/Common/Modal';
 import { useToast } from '../components/Common/Toast';
 import { useAuth } from '../context/AuthContext';
+import { SearchableProductSelect } from '../components/Common/SearchableProductSelect';
 
 interface DispatchRow {
   productId: string;
@@ -474,25 +475,17 @@ export const CollegeDispatchView: React.FC = () => {
                       className={isInsufficient ? 'bg-rose-50/60' : 'hover:bg-slate-50/50'}
                     >
                       <td className="py-2.5 px-3">
-                        <select
-                          required
+                        <SearchableProductSelect
+                          products={products}
                           value={row.productId}
-                          onChange={(e) => {
-                            const newId = e.target.value;
+                          onChange={(newId) => {
                             updateItemRow(idx, 'productId', newId);
                             if (newId && (!row.quantity || row.quantity === 0)) {
                               updateItemRow(idx, 'quantity', 1);
                             }
                           }}
-                          className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                        >
-                          <option value="">-- Select Component / Product --</option>
-                          {products.map((p) => (
-                            <option key={p._id} value={p._id}>
-                              {p.name} ({p.sku}) — Available: {p.currentStock}
-                            </option>
-                          ))}
-                        </select>
+                          placeholder="-- Select Component / Product --"
+                        />
                         {prod && (
                           <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
                             SKU: {prod.sku} • CP: ₹{prod.averageCost}
