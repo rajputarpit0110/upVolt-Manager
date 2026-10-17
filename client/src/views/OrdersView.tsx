@@ -539,7 +539,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <div className="border border-slate-200 rounded-xl overflow-visible bg-white">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-medium">

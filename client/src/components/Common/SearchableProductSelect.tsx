@@ -110,31 +110,31 @@ export const SearchableProductSelect: React.FC<SearchableProductSelectProps> = (
 
       {/* Popover Menu with Instant Search Input */}
       {isOpen && (
-        <div className="absolute z-50 left-0 top-full mt-1 w-full min-w-[280px] max-w-full sm:min-w-[360px] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+        <div className="absolute z-50 left-0 top-full mt-1.5 w-full min-w-[320px] max-w-full sm:min-w-[420px] bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden ring-1 ring-slate-900/5 animate-in fade-in zoom-in-95 duration-100">
           {/* Search Header */}
-          <div className="p-2 border-b border-slate-100 bg-slate-50/80 sticky top-0 z-10 flex items-center gap-1.5">
-            <Search className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-1" />
+          <div className="p-2.5 border-b border-slate-150 bg-slate-50/95 sticky top-0 z-10 flex items-center gap-2">
+            <Search className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
             <input
               ref={searchInputRef}
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search by name, SKU, or keyword anywhere..."
-              className="w-full bg-white border border-slate-200 rounded-md px-2 py-1 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500 focus:border-amber-500"
+              className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
             />
             {searchTerm && (
               <button
                 type="button"
                 onClick={() => setSearchTerm('')}
-                className="p-1 hover:bg-slate-200 rounded text-slate-400 hover:text-slate-600"
+                className="p-1 hover:bg-slate-200 rounded-md text-slate-400 hover:text-slate-600 transition"
               >
-                <X className="w-3 h-3" />
+                <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
           {/* Results List */}
-          <div className="max-h-64 overflow-y-auto divide-y divide-slate-50 text-xs">
+          <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-100 text-xs scroll-smooth">
             {allowCustom && onSelectCustom && (
               <button
                 type="button"
