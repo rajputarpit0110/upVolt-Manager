@@ -190,23 +190,82 @@ export const AddInventoryView: React.FC = () => {
     return items.reduce((acc, row) => acc + (Number(row.quantity) || 0) * (Number(row.costPrice) || 0), 0);
   };
 
-  // Handle Bill File Upload
-  const handleBillUpload = (e: React.ChangeEvent<HTMLInputElement>, isNewProd: boolean = false) => {
+  // Compress images to max 1280px and JPEG quality 0.7 to avoid massive base64 payloads and upload timeouts
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      // If it's a PDF, read as-is
+      if (!file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 1280;
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.72));
+          } else {
+            resolve(event.target?.result as string);
+          }
+        };
+        img.onerror = () => resolve(event.target?.result as string);
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Handle Bill File Upload with automatic compression
+  const handleBillUpload = async (e: React.ChangeEvent<HTMLInputElement>, isNewProd: boolean = false) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
+    try {
+      const compressedBase64 = await compressImage(file);
       if (isNewProd) {
-        setNewProdBillFile(base64);
+        setNewProdBillFile(compressedBase64);
         setNewProdBillFileName(file.name);
       } else {
-        setBillFile(base64);
+        setBillFile(compressedBase64);
         setBillFileName(file.name);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      // Fallback in case of canvas error
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        if (isNewProd) {
+          setNewProdBillFile(base64);
+          setNewProdBillFileName(file.name);
+        } else {
+          setBillFile(base64);
+          setBillFileName(file.name);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Submit Inventory Entry

@@ -73,6 +73,9 @@ const InventoryBatchSchema: Schema = new Schema(
   { timestamps: true }
 );
 
+// Compound index to drastically optimize FIFO allocation and stock valuation queries
+InventoryBatchSchema.index({ productId: 1, status: 1, remainingQuantity: 1 });
+
 export const InventoryBatch = mongoose.model<IInventoryBatch>(
   'InventoryBatch',
   InventoryBatchSchema

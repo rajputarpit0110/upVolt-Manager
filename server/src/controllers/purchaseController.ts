@@ -67,6 +67,12 @@ export const createPurchase = async (req: Request, res: Response): Promise<void>
     const processedItems: IPurchaseItem[] = [];
     let totalAmount = 0;
 
+    // Pre-validate and fetch all products in a single fast query
+    const productIds = items.map((i) => i.productId);
+    const productsMap = new Map<string, any>();
+    const foundProducts = await Product.find({ _id: { $in: productIds } });
+    foundProducts.forEach((p) => productsMap.set(p._id.toString(), p));
+
     for (const item of items) {
       if (!item.productId || !item.quantity || item.costPrice === undefined) {
         res.status(400).json({
@@ -76,7 +82,7 @@ export const createPurchase = async (req: Request, res: Response): Promise<void>
         return;
       }
 
-      const product = await Product.findById(item.productId);
+      const product = productsMap.get(item.productId.toString());
       if (!product) {
         res.status(404).json({ success: false, message: `Product not found: ${item.productId}` });
         return;
