@@ -10,6 +10,7 @@ import {
   Boxes,
   Tag,
   Trash2,
+  X,
 } from 'lucide-react';
 import { Product, Category } from '../types';
 import { productApi, categoryApi } from '../api/client';
@@ -78,10 +79,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const loadProducts = async (showLoading: boolean = true) => {
     if (showLoading) setIsLoading(true);
     try {
-      const params: any = {};
+      const params: any = { limit: 1000 };
       if (categoryFilter !== 'ALL') params.category = categoryFilter;
-      if (stockFilter === 'LOW') params.lowStock = true;
-      if (stockFilter === 'OUT') params.outOfStock = true;
+      if (stockFilter === 'LOW') params.stockStatus = 'LOW_STOCK';
+      if (stockFilter === 'OUT') params.stockStatus = 'OUT_OF_STOCK';
 
       const res = await productApi.getAll(params);
       if (res.success) {
@@ -124,8 +125,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
   const filteredProducts = products.filter((p) => {
     if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q);
+    const q = search.trim().toLowerCase();
+    const name = (p.name || '').toLowerCase();
+    const sku = (p.sku || '').toLowerCase();
+    const cat = (p.category || '').toLowerCase();
+    const loc = (p.location || '').toLowerCase();
+    return name.includes(q) || sku.includes(q) || cat.includes(q) || loc.includes(q);
   });
 
   const categoryNames = ['ALL', ...categoriesList.map((c) => c.name)];
@@ -135,7 +140,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       {/* Header and Add Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Hardware Catalog & Inventory</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Hardware Catalog & Inventory</h1>
+            <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 font-mono">
+              {filteredProducts.length} {filteredProducts.length === 1 ? 'item' : 'items'}
+            </span>
+          </div>
           <p className="text-xs text-slate-500 mt-0.5">
             Physical stock, reserved draft allocations, and FIFO cost tracking for IoT components.
           </p>
@@ -170,8 +180,18 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by product name or SKU..."
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+            className="w-full pl-9 pr-8 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
+              title="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Filter Badges & Dropdown */}

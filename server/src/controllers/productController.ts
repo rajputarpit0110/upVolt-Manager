@@ -14,7 +14,7 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       stockStatus,
       deadStock,
       page = '1',
-      limit = '50',
+      limit = '1000',
       sortBy = 'name',
       sortOrder = 'asc',
     } = req.query;
@@ -30,9 +30,9 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       query.category = category;
     }
 
-    if (stockStatus === 'OUT_OF_STOCK') {
+    if (stockStatus === 'OUT_OF_STOCK' || req.query.outOfStock === 'true') {
       query.currentStock = 0;
-    } else if (stockStatus === 'LOW_STOCK') {
+    } else if (stockStatus === 'LOW_STOCK' || req.query.lowStock === 'true') {
       query.$expr = {
         $and: [
           { $gt: ['$currentStock', 0] },
@@ -62,12 +62,16 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
     const sortOptions: any = {};
     sortOptions[String(sortBy)] = sortOrder === 'desc' ? -1 : 1;
 
-    const skip = (parseInt(String(page)) - 1) * parseInt(String(limit));
+    const isUnlimited = req.query.limit === 'all' || req.query.limit === '0';
+    const limitNum = isUnlimited ? 0 : parseInt(String(limit)) || 1000;
+    const skip = isUnlimited ? 0 : (parseInt(String(page)) - 1) * limitNum;
     const total = await Product.countDocuments(query);
-    const rawProducts = await Product.find(query)
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(parseInt(String(limit)));
+
+    let rawQuery = Product.find(query).sort(sortOptions);
+    if (!isUnlimited) {
+      rawQuery = rawQuery.skip(skip).limit(limitNum);
+    }
+    const rawProducts = await rawQuery;
 
     const products = req.user?.role === 'CAMPUS_EXECUTIVE'
       ? rawProducts.map((p) => {
@@ -79,11 +83,12 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
 
     res.json({
       success: true,
+      count: total,
       products,
       pagination: {
         total,
         page: parseInt(String(page)),
-        pages: Math.ceil(total / parseInt(String(limit))),
+        pages: isUnlimited ? 1 : Math.ceil(total / limitNum),
       },
     });
   } catch (error: any) {

@@ -106,10 +106,22 @@ export const authApi = {
 
 export const productApi = {
   getAll: async (
-    params?: { category?: string; search?: string; lowStock?: boolean; outOfStock?: boolean },
+    params?: {
+      category?: string;
+      search?: string;
+      lowStock?: boolean;
+      outOfStock?: boolean;
+      stockStatus?: string;
+      limit?: number | string;
+      page?: number;
+    },
     options?: CacheOptions
   ) => {
-    return cachedGet<{ success: boolean; count: number; products: Product[] }>('/products', params, options);
+    return cachedGet<{ success: boolean; count: number; products: Product[]; pagination?: any }>(
+      '/products',
+      { limit: 1000, ...params },
+      options
+    );
   },
   getById: async (id: string, options?: CacheOptions) => {
     return cachedGet<{ success: boolean; product: Product }>('/products/' + id, undefined, options);
