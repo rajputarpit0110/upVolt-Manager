@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Product, Category } from '../types';
 import { productApi, categoryApi } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { ProductDetailModal } from '../components/Products/ProductDetailModal';
 import { AdjustStockModal } from '../components/Products/AdjustStockModal';
 import { AddProductModal } from '../components/Products/AddProductModal';
@@ -26,6 +27,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   selectedProductFromParent,
   onClearSelectedProduct,
 }) => {
+  const { isMasterAdmin } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [categoriesList, setCategoriesList] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -324,13 +326,15 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                             <Layers className="w-4 h-4" />
                           </button>
 
-                          <button
-                            onClick={() => setAdjustingProduct(p)}
-                            title="Manual Stock Adjustment"
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition"
-                          >
-                            <Sliders className="w-4 h-4" />
-                          </button>
+                          {isMasterAdmin && (
+                            <button
+                              onClick={() => setAdjustingProduct(p)}
+                              title="Manual Stock Adjustment (Master Admin only)"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition"
+                            >
+                              <Sliders className="w-4 h-4" />
+                            </button>
+                          )}
 
                           <button
                             onClick={() => setEditingProduct(p)}

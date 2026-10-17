@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal } from '../Common/Modal';
 import { Product } from '../../types';
 import { inventoryApi } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../Common/Toast';
 import { AlertCircle } from 'lucide-react';
 
@@ -18,6 +19,7 @@ export const AdjustStockModal: React.FC<AdjustStockModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const { isMasterAdmin } = useAuth();
   const { success, error } = useToast();
   const [direction, setDirection] = useState<'ADD' | 'REMOVE'>('REMOVE');
   const [quantity, setQuantity] = useState<number>(1);
@@ -33,6 +35,10 @@ export const AdjustStockModal: React.FC<AdjustStockModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isMasterAdmin) {
+      error('Access Denied: Only Master Admin is authorized to adjust physical stock.', 'Unauthorized');
+      return;
+    }
     if (quantity <= 0) {
       error('Quantity must be greater than 0', 'Invalid Quantity');
       return;

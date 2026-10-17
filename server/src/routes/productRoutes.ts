@@ -7,7 +7,7 @@ import {
   adjustStock,
   getProductLedger,
 } from '../controllers/productController';
-import { authenticateToken } from '../middlewares/auth';
+import { authenticateToken, requireMasterAdmin } from '../middlewares/auth';
 
 const router = Router();
 
@@ -16,7 +16,7 @@ router.get('/', getProducts);
 router.get('/:id', getProductById);
 router.post('/', createProduct);
 router.put('/:id', updateProduct);
-router.post('/:id/adjust-stock', adjustStock);
+router.post('/:id/adjust-stock', requireMasterAdmin, adjustStock);
 router.get('/:id/ledger', getProductLedger);
 
 export default router;

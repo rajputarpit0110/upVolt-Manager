@@ -325,9 +325,16 @@ export const inventoryApi = {
     notes?: string;
     idempotencyKey?: string;
   }) => {
+    const direction = data.quantity >= 0 ? 'IN' : 'OUT';
     const res = await api.post<{ success: boolean; product: Product; movement: StockMovement }>(
-      '/inventory/adjust',
-      data
+      `/products/${data.productId}/adjust-stock`,
+      {
+        quantity: Math.abs(data.quantity),
+        direction,
+        reason: data.reason,
+        condition: data.condition || 'GOOD',
+        notes: data.notes,
+      }
     );
     return res.data;
   },
