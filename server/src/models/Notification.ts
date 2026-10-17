@@ -36,7 +36,7 @@ const NotificationSchema: Schema = new Schema(
       required: true,
       index: true,
     },
-    referenceId: { type: String },
+    referenceId: { type: String, index: true },
     isRead: { type: Boolean, default: false, index: true },
   },
   { timestamps: { createdAt: true, updatedAt: false } }

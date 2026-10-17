@@ -208,7 +208,7 @@ export const AddInventoryView: React.FC = () => {
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-          const maxDim = 1280;
+          const maxDim = 1024;
 
           if (width > maxDim || height > maxDim) {
             if (width > height) {
@@ -225,7 +225,8 @@ export const AddInventoryView: React.FC = () => {
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.72));
+            // Ultra-lightweight JPEG for bills (< 200KB), fast transfer over any connection
+            resolve(canvas.toDataURL('image/jpeg', 0.65));
           } else {
             resolve(event.target?.result as string);
           }
