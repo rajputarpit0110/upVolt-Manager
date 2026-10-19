@@ -18,6 +18,10 @@ export interface IPurchase extends Document {
   invoiceNumber?: string;
   purchaseDate: Date;
   items: IPurchaseItem[];
+  subtotalAmount?: number;
+  travellingExpense?: number;
+  otherExpense?: number;
+  otherExpenseRemarks?: string;
   totalAmount: number;
   paymentStatus: 'PAID' | 'PENDING' | 'PARTIAL';
   notes?: string;
@@ -56,6 +60,10 @@ const PurchaseSchema: Schema = new Schema(
     invoiceNumber: { type: String, trim: true, index: true },
     purchaseDate: { type: Date, default: Date.now, index: true },
     items: [PurchaseItemSchema],
+    subtotalAmount: { type: Number, default: 0, min: 0 },
+    travellingExpense: { type: Number, default: 0, min: 0 },
+    otherExpense: { type: Number, default: 0, min: 0 },
+    otherExpenseRemarks: { type: String, trim: true },
     totalAmount: { type: Number, required: true, min: 0 },
     paymentStatus: {
       type: String,

@@ -157,6 +157,10 @@ export interface Purchase {
   };
   supplierName?: string;
   items: PurchaseItem[];
+  subtotalAmount?: number;
+  travellingExpense?: number;
+  otherExpense?: number;
+  otherExpenseRemarks?: string;
   totalQuantity: number;
   totalAmount: number;
   status: 'Received' | 'Ordered' | 'Cancelled';

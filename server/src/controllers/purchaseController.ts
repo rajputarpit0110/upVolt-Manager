@@ -55,7 +55,21 @@ export const createPurchase = async (req: Request, res: Response): Promise<void>
       paymentStatus = 'PAID',
       notes,
       attachmentUrl,
+      travellingExpense = 0,
+      otherExpense = 0,
+      otherExpenseRemarks,
     } = req.body;
+
+    const parsedTravelling = Math.max(0, Number(travellingExpense) || 0);
+    const parsedOther = Math.max(0, Number(otherExpense) || 0);
+
+    if (parsedOther > 0 && !otherExpenseRemarks?.trim()) {
+      res.status(400).json({
+        success: false,
+        message: 'Please provide an explanation/reason for other expense.',
+      });
+      return;
+    }
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       res.status(400).json({ success: false, message: 'Purchase must contain at least one item.' });
@@ -126,6 +140,9 @@ export const createPurchase = async (req: Request, res: Response): Promise<void>
       if (supplierDoc) finalSupplierName = supplierDoc.name;
     }
 
+    const itemsSubtotal = totalAmount;
+    const grandTotal = Math.round((itemsSubtotal + parsedTravelling + parsedOther) * 100) / 100;
+
     const purchase = new Purchase({
       purchaseNumber,
       supplierId: supplierId || undefined,
@@ -133,7 +150,11 @@ export const createPurchase = async (req: Request, res: Response): Promise<void>
       invoiceNumber: invoiceNumber?.trim(),
       purchaseDate: purchaseDate ? new Date(purchaseDate) : new Date(),
       items: processedItems,
-      totalAmount: Math.round(totalAmount * 100) / 100,
+      subtotalAmount: Math.round(itemsSubtotal * 100) / 100,
+      travellingExpense: parsedTravelling,
+      otherExpense: parsedOther,
+      otherExpenseRemarks: parsedOther > 0 ? otherExpenseRemarks?.trim() : undefined,
+      totalAmount: grandTotal,
       paymentStatus,
       notes: notes?.trim(),
       attachmentUrl,
@@ -150,7 +171,14 @@ export const createPurchase = async (req: Request, res: Response): Promise<void>
       action: 'RECEIVE_STOCK',
       entityType: 'PURCHASE',
       entityId: purchase._id.toString(),
-      newState: { purchaseNumber, totalAmount, itemsCount: processedItems.length },
+      newState: {
+        purchaseNumber,
+        subtotalAmount: Math.round(itemsSubtotal * 100) / 100,
+        travellingExpense: parsedTravelling,
+        otherExpense: parsedOther,
+        totalAmount: grandTotal,
+        itemsCount: processedItems.length,
+      },
       ip: req.ip,
     });
 

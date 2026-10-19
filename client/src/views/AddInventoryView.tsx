@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   X,
   Sparkles,
+  Truck,
 } from 'lucide-react';
 import { Product, Purchase } from '../types';
 import { productApi, purchaseApi, categoryApi } from '../api/client';
@@ -56,6 +57,9 @@ export const AddInventoryView: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [billFile, setBillFile] = useState<string | null>(null);
   const [billFileName, setBillFileName] = useState('');
+  const [travellingExpense, setTravellingExpense] = useState<number | ''>('');
+  const [otherExpense, setOtherExpense] = useState<number | ''>('');
+  const [otherExpenseRemarks, setOtherExpenseRemarks] = useState('');
 
   const [items, setItems] = useState<InventoryItemRow[]>([
     { productId: '', quantity: 1, costPrice: 0 },
@@ -231,8 +235,15 @@ export const AddInventoryView: React.FC = () => {
   };
 
   // Calculations
-  const calculateTotalCost = () => {
+  const calculateItemsCost = () => {
     return items.reduce((acc, row) => acc + (Number(row.quantity) || 0) * (Number(row.costPrice) || 0), 0);
+  };
+
+  const calculateTotalCost = () => {
+    const itemsTotal = calculateItemsCost();
+    const travel = Number(travellingExpense) || 0;
+    const other = Number(otherExpense) || 0;
+    return itemsTotal + travel + other;
   };
 
   // Compress images to max 1280px and JPEG quality 0.7 to avoid massive base64 payloads and upload timeouts
@@ -337,6 +348,24 @@ export const AddInventoryView: React.FC = () => {
       }
     }
 
+    const travelNum = Number(travellingExpense) || 0;
+    const otherNum = Number(otherExpense) || 0;
+
+    if (travelNum < 0) {
+      error('Travelling expense cannot be negative.');
+      return;
+    }
+
+    if (otherNum < 0) {
+      error('Other expense cannot be negative.');
+      return;
+    }
+
+    if (otherNum > 0 && !otherExpenseRemarks.trim()) {
+      error('Please explain where the other expense was spent (kha kharch hua).', 'Missing Other Expense Explanation');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const res = await purchaseApi.create({
@@ -348,6 +377,9 @@ export const AddInventoryView: React.FC = () => {
           quantity: Number(i.quantity),
           costPrice: Number(i.costPrice),
         })),
+        travellingExpense: travelNum,
+        otherExpense: otherNum,
+        otherExpenseRemarks: otherNum > 0 ? otherExpenseRemarks.trim() : undefined,
         attachmentUrl: billFile || undefined,
         notes: notes.trim() || undefined,
       });
@@ -358,6 +390,9 @@ export const AddInventoryView: React.FC = () => {
         setSupplierName('');
         setInvoiceNumber('');
         setNotes('');
+        setTravellingExpense('');
+        setOtherExpense('');
+        setOtherExpenseRemarks('');
         setBillFile(null);
         setBillFileName('');
         setItems([
@@ -739,6 +774,112 @@ export const AddInventoryView: React.FC = () => {
           </div>
         </div>
 
+        {/* Additional Procurement Expenses (Travelling + Other Expense) */}
+        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-slate-200/60">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-md bg-amber-100 text-amber-700">
+                <Truck className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                  Procurement & Travel Expenses (Extra Expenses)
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Travelling aur other expenses enter karein — ye automatically total purchase cost me add ho jayenge.
+                </p>
+              </div>
+            </div>
+            {(Number(travellingExpense) > 0 || Number(otherExpense) > 0) && (
+              <div className="text-[11px] font-mono font-semibold text-amber-800 bg-amber-100/70 px-2.5 py-1 rounded-md border border-amber-200 shadow-2xs self-start sm:self-auto">
+                Extra Added: +₹{((Number(travellingExpense) || 0) + (Number(otherExpense) || 0)).toLocaleString('en-IN')}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            {/* Field 1: Travelling Expense */}
+            <div className="p-3 bg-white border border-slate-200 rounded-lg space-y-1.5 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Truck className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Travelling Expense (₹)</span>
+                </label>
+                <span className="text-[10px] text-slate-400 font-medium">Auto / Fuel / Fare / Porter</span>
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-2.5 text-slate-400 text-xs font-mono font-medium">₹</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={travellingExpense}
+                  onChange={(e) => setTravellingExpense(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                  placeholder="0.00 (e.g. 150)"
+                  className="w-full pl-7 pr-3 py-2 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:bg-white"
+                />
+              </div>
+              <p className="text-[10px] text-slate-400">
+                Inventory pick karne ya transport karne ka conveyance cost.
+              </p>
+            </div>
+
+            {/* Field 2: Other Expense & Reason */}
+            <div className="p-3 bg-white border border-slate-200 rounded-lg space-y-2 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Coins className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Other Expense (₹)</span>
+                  {Number(otherExpense) > 0 && <span className="text-rose-500 text-xs">*</span>}
+                </label>
+                <span className="text-[10px] text-slate-400 font-medium">Packaging / Food / Misc</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                <div className="relative sm:col-span-2">
+                  <span className="absolute left-3 top-2.5 text-slate-400 text-xs font-mono font-medium">₹</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={otherExpense}
+                    onChange={(e) => setOtherExpense(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                    placeholder="0.00 (e.g. 80)"
+                    className="w-full pl-7 pr-3 py-2 bg-slate-50/60 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white"
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <input
+                    type="text"
+                    value={otherExpenseRemarks}
+                    onChange={(e) => setOtherExpenseRemarks(e.target.value)}
+                    required={Number(otherExpense) > 0}
+                    placeholder={
+                      Number(otherExpense) > 0
+                        ? 'Kaha kharch hua? (Mandatory) *'
+                        : 'Explain where spent (e.g. Refreshments, packaging)'
+                    }
+                    className={`w-full px-3 py-2 border rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
+                      Number(otherExpense) > 0 && !otherExpenseRemarks.trim()
+                        ? 'border-amber-400 bg-amber-50/30 focus:ring-amber-500/30'
+                        : 'bg-slate-50/60 border-slate-200 focus:ring-blue-500/20 focus:bg-white'
+                    }`}
+                  />
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-400">
+                {Number(otherExpense) > 0 && !otherExpenseRemarks.trim() ? (
+                  <span className="text-amber-600 font-semibold">
+                    ⚠️ Explain karein ki ye ₹{otherExpense} kaha kharch hua.
+                  </span>
+                ) : (
+                  'Koi bhi anya kharcha jaise chai-naashta, tape, box packing, ya loading.'
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Bill Attachment & Total Summary */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl items-center">
           {/* Bill Attachment Upload */}
@@ -785,6 +926,33 @@ export const AddInventoryView: React.FC = () => {
             <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold block">
               Total Purchase Cost
             </span>
+
+            {/* Breakdown if extra expenses exist */}
+            {(Number(travellingExpense) > 0 || Number(otherExpense) > 0) && (
+              <div className="text-[11px] text-slate-600 space-y-0.5 font-mono my-1 bg-white/80 p-2 rounded-lg border border-slate-200/60 inline-block text-left w-full max-w-xs ml-auto">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 font-sans">Components Cost:</span>
+                  <span className="font-semibold">₹{calculateItemsCost().toLocaleString('en-IN')}</span>
+                </div>
+                {Number(travellingExpense) > 0 && (
+                  <div className="flex justify-between text-amber-700">
+                    <span className="font-sans flex items-center gap-1">
+                      <Truck className="w-3 h-3" /> Travelling:
+                    </span>
+                    <span className="font-semibold">+₹{Number(travellingExpense).toLocaleString('en-IN')}</span>
+                  </div>
+                )}
+                {Number(otherExpense) > 0 && (
+                  <div className="flex justify-between text-blue-700">
+                    <span className="font-sans flex items-center gap-1 truncate max-w-[160px]" title={otherExpenseRemarks}>
+                      <Coins className="w-3 h-3" /> Other {otherExpenseRemarks ? `(${otherExpenseRemarks})` : ''}:
+                    </span>
+                    <span className="font-semibold">+₹{Number(otherExpense).toLocaleString('en-IN')}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="text-2xl font-extrabold font-mono text-slate-900 mt-0.5">
               ₹{calculateTotalCost().toLocaleString('en-IN')}
             </div>
@@ -872,8 +1040,15 @@ export const AddInventoryView: React.FC = () => {
                       </div>
                     </td>
 
-                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
-                      ₹{pur.totalAmount.toLocaleString('en-IN')}
+                    <td className="py-3 px-4 text-right font-mono">
+                      <div className="font-bold text-slate-900">
+                        ₹{pur.totalAmount.toLocaleString('en-IN')}
+                      </div>
+                      {(Number(pur.travellingExpense) > 0 || Number(pur.otherExpense) > 0) && (
+                        <div className="text-[10px] text-amber-700 font-sans font-medium">
+                          +₹{((Number(pur.travellingExpense) || 0) + (Number(pur.otherExpense) || 0)).toLocaleString('en-IN')} extra
+                        </div>
+                      )}
                     </td>
 
                     <td className="py-3 px-4 text-slate-600 font-medium">
@@ -1137,6 +1312,44 @@ export const AddInventoryView: React.FC = () => {
                 <span className="font-extrabold font-mono text-slate-900 mt-0.5 block">₹{inspectingPurchase.totalAmount.toLocaleString('en-IN')}</span>
               </div>
             </div>
+
+            {(Number(inspectingPurchase.travellingExpense) > 0 || Number(inspectingPurchase.otherExpense) > 0) && (
+              <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl text-xs space-y-2">
+                <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider block">
+                  Procurement Expenses Breakdown
+                </span>
+                <div className="grid grid-cols-3 gap-2 pt-0.5 font-mono text-slate-700">
+                  <div className="p-2 bg-white rounded-lg border border-amber-200/70 shadow-2xs">
+                    <span className="text-[10px] text-slate-400 block font-sans">Components Cost</span>
+                    <span className="font-bold text-slate-800">
+                      ₹{(inspectingPurchase.subtotalAmount || inspectingPurchase.items.reduce((s, it) => s + (it.totalCost || it.costPrice * it.quantity), 0)).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="p-2 bg-white rounded-lg border border-amber-200/70 shadow-2xs">
+                    <span className="text-[10px] text-amber-800 block font-sans flex items-center gap-1">
+                      <Truck className="w-3 h-3 text-amber-600" /> Travelling
+                    </span>
+                    <span className="font-bold text-amber-700">
+                      ₹{(Number(inspectingPurchase.travellingExpense) || 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <div className="p-2 bg-white rounded-lg border border-amber-200/70 shadow-2xs">
+                    <span className="text-[10px] text-blue-800 block font-sans flex items-center gap-1">
+                      <Coins className="w-3 h-3 text-blue-600" /> Other Expense
+                    </span>
+                    <span className="font-bold text-blue-700">
+                      ₹{(Number(inspectingPurchase.otherExpense) || 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+                {inspectingPurchase.otherExpenseRemarks && (
+                  <div className="text-[11px] text-slate-700 bg-white/90 p-2 rounded-lg border border-amber-200/70">
+                    <span className="font-semibold text-slate-800">Other Expense Explanation: </span>
+                    <span className="italic">{inspectingPurchase.otherExpenseRemarks}</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="border border-slate-200 rounded-xl overflow-hidden">
               <table className="w-full text-left text-xs border-collapse">
