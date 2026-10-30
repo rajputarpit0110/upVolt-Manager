@@ -60,6 +60,7 @@ export const CampusDeliveriesView: React.FC = () => {
     return now.toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
   });
   const [deliveryCharge, setDeliveryCharge] = useState<number>(0);
+  const [discount, setDiscount] = useState<number>(0);
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'UPI' | 'Pending'>('UPI');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -163,6 +164,7 @@ export const CampusDeliveriesView: React.FC = () => {
     setCustomCollege('');
     setLocationNotes('');
     setDeliveryCharge(0);
+    setDiscount(0);
     setPaymentMode('UPI');
     setDeliveryDate(new Date().toISOString().slice(0, 16));
 
@@ -207,7 +209,7 @@ export const CampusDeliveriesView: React.FC = () => {
     return items.reduce((acc, curr) => acc + (Number(curr.sellingPrice) || 0) * (Number(curr.quantity) || 0), 0);
   }, [items]);
 
-  const grandTotal = itemsSubtotal + (Number(deliveryCharge) || 0);
+  const grandTotal = Math.max(0, itemsSubtotal + (Number(deliveryCharge) || 0) - (Number(discount) || 0));
 
   const handleSubmitDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,6 +269,7 @@ export const CampusDeliveriesView: React.FC = () => {
           sellingPrice: Number(it.sellingPrice),
           discount: 0,
         })),
+        discount: Number(discount) || 0,
         deliveryCharge: Number(deliveryCharge) || 0,
         status: 'Delivered',
         paymentStatus: paymentMode === 'Pending' ? 'Pending' : 'Paid',
@@ -808,13 +811,27 @@ export const CampusDeliveriesView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Delivery Charge & Payment Section */}
+              {/* Delivery Charge, Discount & Payment Section */}
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
                 <div className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  3. Payment & Delivery Charges
+                  3. Payment, Discounts & Delivery Charges
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-emerald-800 mb-1">
+                      Discount (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={discount || ''}
+                      placeholder="0"
+                      onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs font-bold text-emerald-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    />
+                  </div>
+
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
                       Delivery Charge (₹)
@@ -858,7 +875,20 @@ export const CampusDeliveriesView: React.FC = () => {
 
                 <div className="p-3 bg-amber-100/50 rounded-lg flex items-center justify-between border border-amber-200">
                   <div className="text-xs text-amber-950 font-medium">
-                    Grand Total to Collect:
+                    <div>Grand Total to Collect:</div>
+                    {(discount > 0 || deliveryCharge > 0) && (
+                      <div className="text-[11px] text-slate-600 mt-0.5 flex items-center gap-2">
+                        <span>Items: ₹{itemsSubtotal.toLocaleString('en-IN')}</span>
+                        {discount > 0 && (
+                          <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                            Discount: -₹{discount.toLocaleString('en-IN')}
+                          </span>
+                        )}
+                        {deliveryCharge > 0 && (
+                          <span>Delivery: +₹{deliveryCharge.toLocaleString('en-IN')}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="text-lg font-black text-amber-950 font-mono">
                     ₹{grandTotal.toLocaleString('en-IN')}
@@ -985,6 +1015,12 @@ export const CampusDeliveriesView: React.FC = () => {
                   <span>Subtotal:</span>
                   <span>₹{inspectingOrder.subtotal?.toLocaleString('en-IN')}</span>
                 </div>
+                {inspectingOrder.discount > 0 && (
+                  <div className="flex justify-between text-emerald-600 font-semibold">
+                    <span>Discount:</span>
+                    <span>-₹{inspectingOrder.discount?.toLocaleString('en-IN')}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-slate-500">
                   <span>Delivery Charge:</span>
                   <span>

@@ -71,6 +71,7 @@ export const CollegeMemberInventoryView: React.FC<CollegeMemberInventoryViewProp
     { productId: string; quantity: number; sellingPrice: number }[]
   >([]);
   const [deliveryCharge, setDeliveryCharge] = useState<number>(0);
+  const [discount, setDiscount] = useState<number>(0);
   const [paymentStatus, setPaymentStatus] = useState<'Paid' | 'Pending'>('Paid');
   const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'Cash' | 'Card'>('UPI');
   const [assignedAgentUserId, setAssignedAgentUserId] = useState<string>('');
@@ -149,6 +150,7 @@ export const CollegeMemberInventoryView: React.FC<CollegeMemberInventoryViewProp
     setStudentPhone('');
     setCampusLocation('');
     setDeliveryCharge(0);
+    setDiscount(0);
     setPaymentStatus('Paid');
     setPaymentMethod('UPI');
     setAssignedAgentUserId(deliveryAgents.length > 0 ? deliveryAgents[0].userId : '');
@@ -206,7 +208,7 @@ export const CollegeMemberInventoryView: React.FC<CollegeMemberInventoryViewProp
     );
   }, [items]);
 
-  const grandTotal = itemsSubtotal + (Number(deliveryCharge) || 0);
+  const grandTotal = Math.max(0, itemsSubtotal + (Number(deliveryCharge) || 0) - (Number(discount) || 0));
 
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -272,6 +274,7 @@ export const CollegeMemberInventoryView: React.FC<CollegeMemberInventoryViewProp
           sellingPrice: Number(it.sellingPrice),
           discount: 0,
         })),
+        discount: Number(discount) || 0,
         deliveryCharge: Number(deliveryCharge) || 0,
         status: 'Confirmed',
         paymentStatus: paymentStatus,
@@ -624,6 +627,7 @@ export const CollegeMemberInventoryView: React.FC<CollegeMemberInventoryViewProp
                     <th className="py-3 px-4">Order # & Website Ref</th>
                     <th className="py-3 px-4">Student & Campus Room</th>
                     <th className="py-3 px-4">Ordered Hardware</th>
+                    <th className="py-3 px-4 text-right">Delivery Charge</th>
                     <th className="py-3 px-4 text-right">Total Amount</th>
                     <th className="py-3 px-4 text-center">Payment</th>
                     <th className="py-3 px-4">Assigned Distributive Agent</th>
@@ -634,14 +638,14 @@ export const CollegeMemberInventoryView: React.FC<CollegeMemberInventoryViewProp
                 <tbody className="divide-y divide-slate-100">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                      <td colSpan={9} className="py-12 text-center text-slate-400">
                         <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                         Loading campus orders...
                       </td>
                     </tr>
                   ) : filteredOrders.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                      <td colSpan={9} className="py-12 text-center text-slate-400">
                         <ShoppingCart className="w-8 h-8 mx-auto text-slate-300 mb-2" />
                         <p className="font-semibold text-slate-700">No campus orders found</p>
                         <p className="text-[11px] text-slate-400 mt-0.5">
@@ -715,6 +719,17 @@ export const CollegeMemberInventoryView: React.FC<CollegeMemberInventoryViewProp
                                 </span>
                               ))}
                             </div>
+                          </td>
+
+                          {/* Delivery Charge */}
+                          <td className="py-3.5 px-4 text-right font-mono font-medium whitespace-nowrap">
+                            {(order.deliveryCharge ?? 0) > 0 ? (
+                              <span className="text-indigo-600 font-bold">
+                                ₹{(order.deliveryCharge ?? 0).toLocaleString('en-IN')}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">₹0</span>
+                            )}
                           </td>
 
                           {/* Total */}
@@ -1205,6 +1220,36 @@ export const CollegeMemberInventoryView: React.FC<CollegeMemberInventoryViewProp
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
+                    <label className="block text-xs font-semibold text-emerald-800 mb-1">
+                      Order Discount (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={discount || ''}
+                      placeholder="0"
+                      onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs font-bold text-emerald-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Delivery Charge (₹)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={deliveryCharge || ''}
+                      placeholder="0"
+                      onChange={(e) => setDeliveryCharge(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 placeholder-slate-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
                       Payment Status
                     </label>
@@ -1258,6 +1303,17 @@ export const CollegeMemberInventoryView: React.FC<CollegeMemberInventoryViewProp
                   <span className="text-xl font-extrabold font-mono text-slate-900">
                     ₹{grandTotal.toLocaleString('en-IN')}
                   </span>
+                  {(discount > 0 || deliveryCharge > 0) && (
+                    <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
+                      <span>Items: ₹{itemsSubtotal.toLocaleString('en-IN')}</span>
+                      {discount > 0 && (
+                        <span className="text-emerald-700 font-bold bg-emerald-50 px-1 rounded border border-emerald-200">
+                          Discount: -₹{discount.toLocaleString('en-IN')}
+                        </span>
+                      )}
+                      {deliveryCharge > 0 && <span>Delivery: +₹{deliveryCharge.toLocaleString('en-IN')}</span>}
+                    </div>
+                  )}
                 </div>
                 <div className="text-right">
                   <span className="text-xs font-semibold text-slate-600 block">Items Count:</span>

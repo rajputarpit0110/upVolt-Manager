@@ -16,6 +16,7 @@ export function getDateRangeFilter(preset: string, customStart?: string, customE
   switch (preset) {
     case 'all':
     case 'all_time':
+    case 'overall':
       start = new Date(0);
       end.setHours(23, 59, 59, 999);
       break;

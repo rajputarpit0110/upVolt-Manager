@@ -62,6 +62,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
   // Edit Order State
   const [isEditingOrder, setIsEditingOrder] = useState(false);
+  const [editDiscount, setEditDiscount] = useState<number>(0);
+  const [editDeliveryCharge, setEditDeliveryCharge] = useState<number>(0);
   const [editItems, setEditItems] = useState<
     { productId: string; quantity: number; sellingPrice: number; discount: number }[]
   >([]);
@@ -204,6 +206,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
         discount: i.discount,
       }))
     );
+    setEditDiscount(order.discount || 0);
+    setEditDeliveryCharge(order.deliveryCharge || 0);
     setEditReason('');
     setIsEditingOrder(true);
   };
@@ -219,6 +223,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     try {
       const res = await orderApi.update(order._id, {
         items: editItems,
+        discount: editDiscount,
+        deliveryCharge: editDeliveryCharge,
         changeReason: editReason,
       });
 
@@ -247,7 +253,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
       maxWidth="5xl"
     >
       {/* Top Banner with Financials & Status */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl mb-6">
+      <div className={`grid grid-cols-2 ${order.discount > 0 ? 'sm:grid-cols-4 lg:grid-cols-7' : 'sm:grid-cols-3 lg:grid-cols-6'} gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl mb-6`}>
         <div>
           <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">
             Order Status
@@ -276,6 +282,26 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
         <div>
           <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">
+            Delivery Charge
+          </span>
+          <span className="text-base font-bold font-mono text-indigo-600 mt-1 block">
+            ₹{(order.deliveryCharge || 0).toLocaleString('en-IN')}
+          </span>
+        </div>
+
+        {order.discount > 0 && (
+          <div>
+            <span className="text-[11px] font-medium text-emerald-800 uppercase tracking-wider block">
+              Discount
+            </span>
+            <span className="text-base font-bold font-mono text-emerald-600 mt-1 block">
+              -₹{order.discount.toLocaleString('en-IN')}
+            </span>
+          </div>
+        )}
+
+        <div>
+          <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">
             Revenue
           </span>
           <span className="text-base font-bold font-mono text-slate-900 mt-1 block">
@@ -296,8 +322,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider block">
             Gross Profit (Margin)
           </span>
-          <span className="text-base font-bold font-mono text-emerald-600 mt-1 block">
-            +₹{(order.totalProfit ?? 0).toLocaleString('en-IN')}{' '}
+          <span className={`text-base font-bold font-mono mt-1 block ${(order.totalProfit ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+            {(order.totalProfit ?? 0) >= 0
+              ? `+₹${(order.totalProfit ?? 0).toLocaleString('en-IN')}`
+              : `-₹${Math.abs(order.totalProfit ?? 0).toLocaleString('en-IN')}`}{' '}
             <span className="text-xs text-slate-500 font-sans">({order.grossMargin ?? 0}%)</span>
           </span>
         </div>
@@ -463,8 +491,8 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                       ₹{item.cogs.toLocaleString('en-IN')}
                     </td>
 
-                    <td className="py-3 px-3 text-right font-bold text-emerald-600">
-                      +₹{item.profit.toLocaleString('en-IN')}
+                    <td className={`py-3 px-3 text-right font-bold ${item.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {item.profit >= 0 ? `+₹${item.profit.toLocaleString('en-IN')}` : `-₹${Math.abs(item.profit).toLocaleString('en-IN')}`}
                     </td>
 
                     {/* Exact FIFO Batch Allocations Display */}
@@ -842,6 +870,32 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-slate-700">Order Discount (₹):</span>
+              <input
+                type="number"
+                min={0}
+                value={editDiscount || ''}
+                placeholder="0"
+                onChange={(e) => setEditDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+                className="w-32 px-2.5 py-1.5 bg-white border border-emerald-300 rounded-lg text-xs font-mono font-bold text-emerald-700 text-right focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-indigo-900">Delivery Charge (₹):</span>
+              <input
+                type="number"
+                min={0}
+                value={editDeliveryCharge || ''}
+                placeholder="0"
+                onChange={(e) => setEditDeliveryCharge(Math.max(0, parseFloat(e.target.value) || 0))}
+                className="w-32 px-2.5 py-1.5 bg-white border border-indigo-300 rounded-lg text-xs font-mono font-bold text-indigo-800 text-right focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
           </div>
 
           <div>

@@ -32,6 +32,7 @@ export interface ICreateOrderInput {
   orderDate?: Date | string;
   orderNumber?: string;
   deliveryCharge?: number;
+  discount?: number;
   status?: OrderStatus;
   paymentStatus?: PaymentStatus;
   paymentMethod?: PaymentMethod;
@@ -267,11 +268,18 @@ export async function createOrder(
     throw error;
   }
 
-  const deliveryCharge = input.deliveryCharge || 0;
-  const totalAmount = subtotal - totalOrderDiscount + deliveryCharge;
-  const totalProfit = shouldDeductStock ? totalAmount - totalCost : 0;
-  const grossMargin = totalAmount > 0 && shouldDeductStock ? (totalProfit / totalAmount) * 100 : 0;
-  const amountPaid = input.amountPaid || 0;
+  const deliveryCharge = Math.max(0, Number(input.deliveryCharge) || 0);
+  const orderLevelDiscount = Math.max(0, Number(input.discount) || 0);
+  const totalOrderDiscountCalculated = totalOrderDiscount + orderLevelDiscount;
+  const totalAmount = Math.max(0, subtotal - totalOrderDiscountCalculated + deliveryCharge);
+  const totalProfit = shouldDeductStock ? Math.round((totalAmount - totalCost) * 100) / 100 : 0;
+  const grossMargin = totalAmount > 0 && shouldDeductStock ? Math.round((totalProfit / totalAmount) * 10000) / 100 : 0;
+  const amountPaid =
+    input.paymentStatus === 'Paid'
+      ? input.amountPaid !== undefined && input.amountPaid >= totalAmount
+        ? input.amountPaid
+        : totalAmount
+      : input.amountPaid || 0;
   const amountDue = Math.max(0, totalAmount - amountPaid);
 
   let assignedAgent: any = undefined;
@@ -302,12 +310,12 @@ export async function createOrder(
     customer: input.customer,
     items: processedItems,
     subtotal: Math.round(subtotal * 100) / 100,
-    discount: Math.round(totalOrderDiscount * 100) / 100,
+    discount: Math.round(totalOrderDiscountCalculated * 100) / 100,
     deliveryCharge: Math.round(deliveryCharge * 100) / 100,
     totalAmount: Math.round(totalAmount * 100) / 100,
     totalCost: Math.round(totalCost * 100) / 100,
-    totalProfit: Math.round(totalProfit * 100) / 100,
-    grossMargin: Math.round(grossMargin * 100) / 100,
+    totalProfit,
+    grossMargin,
     paymentStatus: input.paymentStatus || (amountPaid >= totalAmount ? 'Paid' : amountPaid > 0 ? 'Partial' : 'Pending'),
     paymentMethod: input.paymentMethod || 'UPI',
     amountPaid,
@@ -443,6 +451,8 @@ export async function updateOrder(
     paymentStatus?: PaymentStatus;
     paymentMethod?: PaymentMethod;
     amountPaid?: number;
+    discount?: number;
+    deliveryCharge?: number;
     notes?: string;
     changeReason?: string;
   },
@@ -483,6 +493,14 @@ export async function updateOrder(
     diffs.push({ field: 'amountPaid', oldValue: order.amountPaid, newValue: updates.amountPaid });
     order.amountPaid = updates.amountPaid;
     order.amountDue = Math.max(0, order.totalAmount - order.amountPaid);
+  }
+  if (updates.deliveryCharge !== undefined && updates.deliveryCharge !== order.deliveryCharge) {
+    diffs.push({ field: 'deliveryCharge', oldValue: order.deliveryCharge, newValue: updates.deliveryCharge });
+    order.deliveryCharge = Math.max(0, updates.deliveryCharge);
+  }
+  if (updates.discount !== undefined && updates.discount !== order.discount) {
+    diffs.push({ field: 'discount', oldValue: order.discount, newValue: updates.discount });
+    order.discount = Math.max(0, updates.discount);
   }
 
   // If line items are being edited and order already deducted stock:
@@ -721,13 +739,19 @@ export async function updateOrder(
       }
     }
 
+    const finalDiscount = updates.discount !== undefined ? Math.max(0, updates.discount) : newTotalDiscount;
     order.items = newItems;
     order.subtotal = Math.round(newSubtotal * 100) / 100;
-    order.discount = Math.round(newTotalDiscount * 100) / 100;
-    order.totalAmount = Math.round((newSubtotal - newTotalDiscount) * 100) / 100;
+    order.discount = Math.round(finalDiscount * 100) / 100;
+    order.totalAmount = Math.max(0, Math.round((newSubtotal - finalDiscount + (order.deliveryCharge || 0)) * 100) / 100);
     order.totalCost = Math.round(newTotalCost * 100) / 100;
     order.totalProfit = Math.round((order.totalAmount - order.totalCost) * 100) / 100;
     order.grossMargin = order.totalAmount > 0 ? Math.round((order.totalProfit / order.totalAmount) * 10000) / 100 : 0;
+    order.amountDue = Math.max(0, order.totalAmount - order.amountPaid);
+  } else if (updates.discount !== undefined || updates.deliveryCharge !== undefined) {
+    order.totalAmount = Math.max(0, Math.round((order.subtotal - order.discount + (order.deliveryCharge || 0)) * 100) / 100);
+    order.totalProfit = order.stockDeducted ? Math.round((order.totalAmount - order.totalCost) * 100) / 100 : 0;
+    order.grossMargin = order.totalAmount > 0 && order.stockDeducted ? Math.round((order.totalProfit / order.totalAmount) * 10000) / 100 : 0;
     order.amountDue = Math.max(0, order.totalAmount - order.amountPaid);
   }
 

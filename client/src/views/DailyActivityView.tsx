@@ -250,7 +250,7 @@ export const DailyActivityView: React.FC = () => {
               />
               <StatCard
                 title="Gross Profit"
-                value={`+₹${(f.profit || 0).toLocaleString('en-IN')}`}
+                value={(f.profit || 0) >= 0 ? `+₹${(f.profit || 0).toLocaleString('en-IN')}` : `-₹${Math.abs(f.profit || 0).toLocaleString('en-IN')}`}
                 subtitle={`${f.margin || 0}% Gross Margin`}
                 icon={TrendingUp}
               />
@@ -305,8 +305,8 @@ export const DailyActivityView: React.FC = () => {
                         <td className="py-2.5 px-3 text-right text-slate-900 font-bold">
                           ₹{item.revenue.toLocaleString('en-IN')}
                         </td>
-                        <td className="py-2.5 px-3 text-right text-emerald-600 font-bold">
-                          +₹{item.profit.toLocaleString('en-IN')}
+                        <td className={`py-2.5 px-3 text-right font-bold ${item.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {item.profit >= 0 ? `+₹${item.profit.toLocaleString('en-IN')}` : `-₹${Math.abs(item.profit).toLocaleString('en-IN')}`}
                         </td>
                       </tr>
                     ))}

@@ -41,6 +41,30 @@ export async function allocateFifoStock(
     const batch = await query.exec();
     if (!batch) {
       const product = await Product.findById(productId);
+      if (product && product.currentStock >= remainingToAllocate) {
+        // Auto-heal discrepancy: Create opening active batch for in-stock inventory
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const randHex = Math.floor(1000 + Math.random() * 9000);
+        const batchNumber = `BATCH-AUTO-${dateStr}-${randHex}`;
+        const cp = product.averageCost > 0 ? product.averageCost : 0;
+        const autoQty = Math.max(remainingToAllocate, product.currentStock);
+
+        await InventoryBatch.create({
+          batchNumber,
+          productId: product._id,
+          costPrice: cp,
+          initialQuantity: autoQty,
+          remainingQuantity: autoQty,
+          storageLocation: product.locationShelf || 'Shelf General',
+          receivedDate: new Date(),
+          notes: `Auto-generated FIFO batch for in-stock physical inventory (${autoQty} units)`,
+          status: 'ACTIVE',
+        });
+
+        // Continue to allocate from the newly created active batch
+        continue;
+      }
+
       const prodName = product ? product.name : 'Product';
       throw new Error(
         `Insufficient stock. Inventory batches exhausted for ${prodName}. Still needed: ${remainingToAllocate} unit(s).`

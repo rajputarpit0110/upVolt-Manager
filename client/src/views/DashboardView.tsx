@@ -128,6 +128,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <option value="this_month">This Month</option>
               <option value="last_month">Last Month</option>
               <option value="this_year">This Year</option>
+              <option value="overall">Overall</option>
               <option value="custom">📅 Custom Date Range (From - To)</option>
             </select>
           </div>

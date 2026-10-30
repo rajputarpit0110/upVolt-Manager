@@ -178,8 +178,8 @@ export async function autoReconcileDiscrepancies(): Promise<{
     const difference = prod.currentStock - sumBatchRemaining;
     if (difference > 0) {
       const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-      const randHex = Math.floor(1000 + Math.random() * 9000);
-      const batchNumber = `BATCH-RECON-${dateStr}-${randHex}`;
+      const randStr = Math.random().toString(36).substring(2, 7).toUpperCase();
+      const batchNumber = `BATCH-RECON-${dateStr}-${(prod.sku || 'ITEM').replace(/[^a-zA-Z0-9]/g, '')}-${randStr}-${Date.now().toString().slice(-4)}`;
       const cp = prod.averageCost > 0 ? prod.averageCost : 0;
 
       await InventoryBatch.create({

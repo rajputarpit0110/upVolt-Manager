@@ -54,6 +54,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const [paymentStatus, setPaymentStatus] = useState('Paid');
   const [paymentMethod, setPaymentMethod] = useState('UPI');
   const [amountPaid, setAmountPaid] = useState<number>(0);
+  const [orderDiscount, setOrderDiscount] = useState<number>(0);
+  const [deliveryCharge, setDeliveryCharge] = useState<number>(0);
   const [notes, setNotes] = useState('');
   const [idempotencyKey, setIdempotencyKey] = useState('');
   const [items, setItems] = useState<
@@ -115,6 +117,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     setCustomerOrg('');
     setPaymentStatus('Paid');
     setPaymentMethod('UPI');
+    setOrderDiscount(0);
+    setDeliveryCharge(0);
     setNotes('');
 
     if (products.length > 0) {
@@ -179,8 +183,13 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
     setItems(updated);
   };
 
-  const calculateSubtotal = () =>
-    items.reduce((acc, i) => acc + i.quantity * i.sellingPrice - (i.discount || 0), 0);
+  const itemsGross = items.reduce((acc, i) => acc + (Number(i.quantity) || 0) * (Number(i.sellingPrice) || 0), 0);
+  const itemsDiscountTotal = items.reduce((acc, i) => acc + (Number(i.discount) || 0), 0);
+  const itemsNet = Math.max(0, itemsGross - itemsDiscountTotal);
+  const grandTotal = Math.max(0, itemsNet - (Number(orderDiscount) || 0) + (Number(deliveryCharge) || 0));
+  const totalCombinedDiscount = itemsDiscountTotal + (Number(orderDiscount) || 0);
+
+  const calculateSubtotal = () => itemsNet;
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,7 +222,6 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
 
     setIsSubmitting(true);
     try {
-      const subtotal = calculateSubtotal();
       const res = await orderApi.create({
         customer: {
           customerId: selectedCustomerId || undefined,
@@ -223,10 +231,12 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
           organization: customerOrg,
         },
         items,
+        discount: Number(orderDiscount) || 0,
+        deliveryCharge: Number(deliveryCharge) || 0,
         status: orderStatus,
         paymentStatus,
         paymentMethod,
-        amountPaid: paymentStatus === 'Paid' ? subtotal : amountPaid,
+        amountPaid: paymentStatus === 'Paid' ? grandTotal : amountPaid,
         notes,
         idempotencyKey,
       });
@@ -338,6 +348,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                 <th className="py-3 px-4">Date</th>
                 <th className="py-3 px-4">Customer</th>
                 <th className="py-3 px-4">Items Summary</th>
+                <th className="py-3 px-4 text-right">Delivery Charges</th>
                 <th className="py-3 px-4 text-right">Revenue</th>
                 <th className="py-3 px-4 text-right">COGS</th>
                 <th className="py-3 px-4 text-right">Gross Profit</th>
@@ -348,13 +359,13 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
             <tbody className="divide-y divide-slate-100">
               {isLoading && orders.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
                     Loading commercial orders...
                   </td>
                 </tr>
               ) : filteredOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
                     No orders found matching the filter criteria.
                   </td>
                 </tr>
@@ -389,14 +400,25 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                     <td className="py-3 px-4 text-slate-600 max-w-xs truncate">
                       {order.items?.map((i) => `${i.quantity}x ${i.productName}`).join(', ')}
                     </td>
+                    <td className="py-3 px-4 text-right font-mono">
+                      {(order.deliveryCharge ?? 0) > 0 ? (
+                        <span className="text-indigo-600 font-bold">
+                          ₹{(order.deliveryCharge ?? 0).toLocaleString('en-IN')}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">₹0</span>
+                      )}
+                    </td>
                     <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
                       ₹{order.totalAmount.toLocaleString('en-IN')}
                     </td>
                     <td className="py-3 px-4 text-right font-mono text-slate-600">
                       ₹{(order.totalCost ?? 0).toLocaleString('en-IN')}
                     </td>
-                    <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600">
-                      +₹{(order.totalProfit ?? 0).toLocaleString('en-IN')}
+                    <td className={`py-3 px-4 text-right font-mono font-bold ${(order.totalProfit ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {(order.totalProfit ?? 0) >= 0
+                        ? `+₹${(order.totalProfit ?? 0).toLocaleString('en-IN')}`
+                        : `-₹${Math.abs(order.totalProfit ?? 0).toLocaleString('en-IN')}`}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <OrderStatusBadge status={order.status} />
@@ -640,8 +662,37 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
             )}
           </div>
 
-          {/* Payment Details */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+          {/* Discounts, Delivery Charge & Payment Details */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+            <div>
+              <label className="block text-[11px] font-bold text-emerald-800 mb-1">
+                Order Discount (₹)
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={orderDiscount || ''}
+                placeholder="0"
+                onChange={(e) => setOrderDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+                className="w-full px-2.5 py-1.5 bg-white border border-emerald-300 rounded-lg font-mono font-bold text-emerald-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-indigo-900 mb-1 flex items-center justify-between">
+                <span>Delivery Charge (₹)</span>
+                <span className="text-[10px] text-indigo-600 font-normal">Adds to Total</span>
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={deliveryCharge || ''}
+                placeholder="0"
+                onChange={(e) => setDeliveryCharge(Math.max(0, parseFloat(e.target.value) || 0))}
+                className="w-full px-2.5 py-1.5 bg-white border border-indigo-300 rounded-lg font-mono font-bold text-indigo-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                 Payment Status
@@ -674,8 +725,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
             </div>
 
             {paymentStatus === 'Partial' && (
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+              <div className="sm:col-span-4 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+                <label className="block text-[11px] font-semibold text-amber-900 mb-1">
                   Amount Collected (₹)
                 </label>
                 <input
@@ -683,7 +734,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                   min={0}
                   value={amountPaid}
                   onChange={(e) => setAmountPaid(parseFloat(e.target.value) || 0)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono"
+                  className="w-full sm:w-64 px-2.5 py-1.5 bg-white border border-amber-300 rounded-lg font-mono font-bold"
                   required
                 />
               </div>
@@ -692,10 +743,28 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
 
           {/* Footer Subtotal & Action */}
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <span className="text-xs text-slate-500">Order Subtotal (Net Revenue):</span>
-              <div className="text-xl font-bold font-mono text-slate-900">
-                ₹{calculateSubtotal().toLocaleString('en-IN')}
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                <span>Items Subtotal: <b className="font-mono text-slate-700">₹{itemsGross.toLocaleString('en-IN')}</b></span>
+                {totalCombinedDiscount > 0 && (
+                  <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Discount: -₹{totalCombinedDiscount.toLocaleString('en-IN')}
+                  </span>
+                )}
+                {deliveryCharge > 0 && (
+                  <span className="text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                    Delivery: +₹{deliveryCharge.toLocaleString('en-IN')}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs font-semibold text-slate-600">Total Money to Collect:</span>
+                <span className="text-2xl font-black font-mono text-slate-900">
+                  ₹{grandTotal.toLocaleString('en-IN')}
+                </span>
+                <span className="text-[11px] text-slate-400 font-normal">
+                  (Items + Delivery)
+                </span>
               </div>
             </div>
 

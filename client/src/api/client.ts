@@ -232,6 +232,7 @@ export const orderApi = {
     paymentStatus?: string;
     paymentMethod?: string;
     amountPaid?: number;
+    discount?: number;
     deliveryCharge?: number;
     notes?: string;
     idempotencyKey?: string;
@@ -258,6 +259,10 @@ export const orderApi = {
       items?: { productId: string; quantity: number; sellingPrice: number; discount?: number }[];
       customer?: any;
       paymentStatus?: string;
+      paymentMethod?: string;
+      amountPaid?: number;
+      discount?: number;
+      deliveryCharge?: number;
       notes?: string;
       changeReason: string;
     }
